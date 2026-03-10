@@ -1,0 +1,8 @@
+Statistic,Value
+N total,142
+N treated (T=1),36
+N control (T=0),106
+Poverty 75th percentile (cutoff),-0.6952
+E[Y|T=1] (mean outcome treated),0.2607
+E[Y|T=0] (mean outcome control),0.0688
+τ_naive (unadjusted ATE),0.1919

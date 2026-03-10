@@ -1,0 +1,6 @@
+Poverty Quintile,Gini (WorldPop),Gini (Meta),ΔGini (Meta − WP)
+Q1 (Lowest poverty),0.178,0.229,0.051
+Q2,0.270,0.281,0.010
+Q3,0.379,0.398,0.019
+Q4,0.477,0.434,-0.043
+Q5 (Highest poverty),0.832,0.684,-0.148

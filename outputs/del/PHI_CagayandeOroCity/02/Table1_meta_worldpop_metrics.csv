@@ -1,0 +1,11 @@
+Metric,Value,Input
+Number of quadkeys,100,—
+Spearman ρ (log shares),0.851,log(meta_share) vs log(wp_share)
+Pearson r (log shares),0.845,log(meta_share) vs log(wp_share)
+KS statistic,0.170,"shares normalized [0,1]"
+KS p-value,0.111,"shares normalized [0,1]"
+Earth Mover's Distance,0.011,"shares normalized [0,1]"
+Gini (WorldPop),0.732,spatial shares
+Gini (Meta baseline),0.740,spatial shares
+ΔGini (Meta − WP),0.008,spatial shares
+Mean allocation_residual,-0.241,log(meta_share/wp_share)

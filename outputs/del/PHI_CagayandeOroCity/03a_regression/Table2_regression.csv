@@ -1,0 +1,4 @@
+Variable,Model_1_Bivariate,Model_2_Controlled,beta_standardized,partial_R2
+Log pop density (std),—,"-0.668** (SE=0.231, HC3=0.507)",-0.6222,0.0763
+Constant,-0.244,-0.244* (0.103),—,—
+Observations,97,97,—,—

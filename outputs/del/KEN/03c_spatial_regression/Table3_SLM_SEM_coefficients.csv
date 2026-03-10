@@ -1,0 +1,6 @@
+Variable,SLM Coef,SEM Coef,SEM p-value
+Constant,-0.0135,-0.3713,0.1041
+T (poverty top quartile),-0.1273,-0.1407,0.0510
+Distance (z),-0.4150***,-0.8359***,<0.001
+Log Population Density (z),-0.5659***,-0.8442***,<0.001
+Spatial parameter,ρ = 0.5762***,λ = 0.8990***,<0.001
