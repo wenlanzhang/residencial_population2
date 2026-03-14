@@ -23,6 +23,7 @@
 
 - **data_root** (top-level): Base path for external data. Paths for `worldpop`, `poverty`, and `pdc_raw_dir` are relative to this.
 - **Project paths**: `meta`, `clip_shape`, `pdc_processed_csv` are relative to the project root.
+- **meta** includes the reference hour: `outputs/{REGION}/fb_baseline_median_h{00|08|16}.gpkg`. Use the default-hour file for the pipeline, or pass `--meta` to 01_harmonise when using a different hour.
 - To use a different data location, change `data_root` only.
 
 ## Adding a new region

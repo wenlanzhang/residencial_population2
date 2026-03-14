@@ -59,5 +59,9 @@ Produces: Figure 1 (spatial agreement log-log scatter), Figure (concentration ra
 
 ## Prerequisites
 
-- Step 01, 02, 03c outputs must exist (or run without `--aggregate-only`)
-- Meta baseline GPKGs must be built: `python data_prep/build_fb_baseline_median.py --region REGION`
+- **Meta baseline GPKGs** must be built first. See main README:
+  ```bash
+  python data_prep/build_fb_baseline_median.py --all
+  # Or with reference hour: python data_prep/build_fb_baseline_median.py --all --ref-hour 8
+  ```
+- Step 01, 02, 03c outputs must exist for each region (or run without `--aggregate-only` to generate them)

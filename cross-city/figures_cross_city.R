@@ -19,6 +19,7 @@ suppressPackageStartupMessages({
 })
 has_patchwork <- requireNamespace("patchwork", quietly = TRUE)
 if (has_patchwork) library(patchwork)
+has_ggspatial <- requireNamespace("ggspatial", quietly = TRUE)
 
 # Paths
 args <- commandArgs(trailingOnly = TRUE)
@@ -134,7 +135,7 @@ if (length(fig1_scatter_plots) >= 4) {
         plot.subtitle = element_text(colour = "gray40", size = 9)
       )
     ggsave(file.path(out_dir, "Figure1_spatial_agreement.png"), combined1, width = 10, height = 7, dpi = 300)
-    ggsave(file.path(out_dir, "Figure1_spatial_agreement.pdf"), combined1, width = 10, height = 7)
+    # ggsave(file.path(out_dir, "Figure1_spatial_agreement.pdf"), combined1, width = 10, height = 7)
   } else if (requireNamespace("gridExtra", quietly = TRUE)) {
     png(file.path(out_dir, "Figure1_spatial_agreement.png"), width = 10, height = 7, units = "in", res = 300)
     gridExtra::grid.arrange(
@@ -143,13 +144,13 @@ if (length(fig1_scatter_plots) >= 4) {
       ncol = 3,
       top = "Spatial Agreement (log-log scatter)")
     dev.off()
-    pdf(file.path(out_dir, "Figure1_spatial_agreement.pdf"), width = 10, height = 7)
-    gridExtra::grid.arrange(
-      fig1_scatter_plots[["Davao City"]], fig1_scatter_plots[["Nairobi"]], fig1_scatter_plots[["Mombasa"]],
-      fig1_scatter_plots[["Cagayan de Oro"]], fig1_scatter_plots[["Mexico City"]],
-      ncol = 3,
-      top = "Spatial Agreement (log-log scatter)")
-    dev.off()
+    # pdf(file.path(out_dir, "Figure1_spatial_agreement.pdf"), width = 10, height = 7)
+    # gridExtra::grid.arrange(
+    #   fig1_scatter_plots[["Davao City"]], fig1_scatter_plots[["Nairobi"]], fig1_scatter_plots[["Mombasa"]],
+    #   fig1_scatter_plots[["Cagayan de Oro"]], fig1_scatter_plots[["Mexico City"]],
+    #   ncol = 3,
+    #   top = "Spatial Agreement (log-log scatter)")
+    # dev.off()
   } else {
     ggsave(file.path(out_dir, "Figure1_spatial_agreement.png"), fig1_scatter_plots[[1]], width = 6, height = 5, dpi = 300)
     message("Install patchwork or gridExtra for full 2x2 Figure 1; saved first panel only")
@@ -168,7 +169,7 @@ if (length(fig1_scatter_plots) >= 4) {
         plot.subtitle = element_text(colour = "gray40", size = 9)
       )
     ggsave(file.path(out_dir, "Figure1_spatial_agreement_row.png"), combined1_row, width = 16, height = 4, dpi = 300)
-    ggsave(file.path(out_dir, "Figure1_spatial_agreement_row.pdf"), combined1_row, width = 16, height = 4)
+    # ggsave(file.path(out_dir, "Figure1_spatial_agreement_row.pdf"), combined1_row, width = 16, height = 4)
     message("Saved: Figure1_spatial_agreement_row.png/.pdf")
   }
 }
@@ -222,7 +223,7 @@ if (nrow(fig1_data) > 0) {
       axis.text.x = element_text(angle = 15, hjust = 1)
     )
   ggsave(file.path(out_dir, "Figure_concentration_ratio.png"), p1, width = 6, height = 3.2, dpi = 300)
-  ggsave(file.path(out_dir, "Figure_concentration_ratio.pdf"), p1, width = 6, height = 3.2)
+  # ggsave(file.path(out_dir, "Figure_concentration_ratio.pdf"), p1, width = 6, height = 3.2)
   message("Saved: Figure_concentration_ratio.png/.pdf")
 }
 
@@ -292,7 +293,7 @@ if (length(fig2_plots) >= 4) {
         plot.subtitle = element_text(colour = "gray40", size = 9)
       )
     ggsave(file.path(out_dir, "Figure2_lorenz_curves.png"), combined, width = 10, height = 7, dpi = 300)
-    ggsave(file.path(out_dir, "Figure2_lorenz_curves.pdf"), combined, width = 10, height = 7)
+    # ggsave(file.path(out_dir, "Figure2_lorenz_curves.pdf"), combined, width = 10, height = 7)
   } else if (requireNamespace("gridExtra", quietly = TRUE)) {
     png(file.path(out_dir, "Figure2_lorenz_curves.png"), width = 10, height = 7, units = "in", res = 300)
     gridExtra::grid.arrange(
@@ -301,13 +302,13 @@ if (length(fig2_plots) >= 4) {
       ncol = 3,
       top = "Lorenz Curves (Panel A: Davao | B: Nairobi | C: Mombasa | D: Cagayan | E: Mexico)")
     dev.off()
-    pdf(file.path(out_dir, "Figure2_lorenz_curves.pdf"), width = 10, height = 7)
-    gridExtra::grid.arrange(
-      fig2_plots[["Davao City"]], fig2_plots[["Nairobi"]], fig2_plots[["Mombasa"]],
-      fig2_plots[["Cagayan de Oro"]], fig2_plots[["Mexico City"]],
-      ncol = 3,
-      top = "Lorenz Curves (Panel A: Davao | B: Nairobi | C: Mombasa | D: Cagayan | E: Mexico)")
-    dev.off()
+    # pdf(file.path(out_dir, "Figure2_lorenz_curves.pdf"), width = 10, height = 7)
+    # gridExtra::grid.arrange(
+    #   fig2_plots[["Davao City"]], fig2_plots[["Nairobi"]], fig2_plots[["Mombasa"]],
+    #   fig2_plots[["Cagayan de Oro"]], fig2_plots[["Mexico City"]],
+    #   ncol = 3,
+    #   top = "Lorenz Curves (Panel A: Davao | B: Nairobi | C: Mombasa | D: Cagayan | E: Mexico)")
+    # dev.off()
   } else {
     ggsave(file.path(out_dir, "Figure2_lorenz_curves.png"), fig2_plots[["Davao City"]], width = 6, height = 5, dpi = 300)
     message("Install patchwork or gridExtra for full 2x2 Figure 2; saved Davao only")
@@ -328,32 +329,36 @@ if (length(fig2_plots) >= 4) {
         plot.subtitle = element_text(colour = "gray40", size = 9)
       )
     ggsave(file.path(out_dir, "Figure2_lorenz_curves_row.png"), combined2_row, width = 16, height = 4, dpi = 300)
-    ggsave(file.path(out_dir, "Figure2_lorenz_curves_row.pdf"), combined2_row, width = 16, height = 4)
+    # ggsave(file.path(out_dir, "Figure2_lorenz_curves_row.pdf"), combined2_row, width = 16, height = 4)
     message("Saved: Figure2_lorenz_curves_row.png/.pdf")
   }
 }
 
-# ---- FIGURE 4: Allocation Residual Maps (Davao + Mexico) ----
-fig3_cities <- list("Davao City" = "PHI_DavaoCity", "Mexico City" = "MEX")
-fig3_list <- list()
-for (city in names(fig3_cities)) {
-  reg <- fig3_cities[[city]]
+# ---- Helper: build allocation residual map for one city ----
+build_residual_map <- function(city, reg, crs_epsg) {
   path <- file.path(project_root, "outputs", reg, "02", "harmonised_with_residual.gpkg")
-  if (!file.exists(path)) next
+  if (!file.exists(path)) return(NULL)
   gdf <- st_read(path, quiet = TRUE)
   gdf <- gdf[!is.na(gdf$allocation_residual), ]
-  if (nrow(gdf) == 0) next
+  if (nrow(gdf) == 0) return(NULL)
   v <- gdf$allocation_residual
   vlim <- max(abs(range(v, na.rm = TRUE)), 0.5)
   vlim <- pmin(vlim, 2)
-  p <- ggplot(gdf) +
+  gdf_proj <- st_transform(gdf, crs_epsg)
+  p <- ggplot(gdf_proj) +
     geom_sf(aes(fill = pmin(pmax(allocation_residual, -vlim), vlim)), colour = NA) +
-    geom_sf(data = gdf, fill = NA, colour = "gray85", linewidth = 0.15) +
+    geom_sf(data = gdf_proj, fill = NA, colour = "gray85", linewidth = 0.15) +
     scale_fill_gradientn(
       colours = armyrose,
       values = seq(0, 1, length.out = 7),
       limits = c(-vlim, vlim), oob = scales::squish,
       name = expression(log(meta/wp))
+    ) +
+    coord_sf(
+      crs = crs_epsg,
+      datum = sf::st_crs(4326),
+      label_graticule = "SW",
+      label_axes = "SW"
     ) +
     labs(title = city) +
     theme_void() +
@@ -362,9 +367,46 @@ for (city in names(fig3_cities)) {
       legend.position = "bottom",
       legend.direction = "horizontal",
       legend.key.width = unit(1.2, "cm"),
-      legend.key.height = unit(0.4, "cm")
+      legend.key.height = unit(0.4, "cm"),
+      panel.border = element_rect(fill = NA, colour = "gray30", linewidth = 0.8),
+      axis.text = element_text(size = 7, colour = "gray30"),
+      axis.ticks = element_line(colour = "gray50", linewidth = 0.3),
+      axis.ticks.length = unit(0.1, "cm")
     )
-  fig3_list[[city]] <- p
+  bbox <- st_bbox(gdf_proj)
+  x_extent <- as.numeric(bbox["xmax"] - bbox["xmin"])
+  y_extent <- as.numeric(bbox["ymax"] - bbox["ymin"])
+  pad_frac <- 0.04
+  scale_x0 <- as.numeric(bbox["xmin"]) + x_extent * pad_frac
+  scale_y0 <- as.numeric(bbox["ymin"]) + y_extent * pad_frac
+  scale_x1 <- scale_x0 + 10000
+  p <- p +
+    annotate("segment", x = scale_x0, xend = scale_x1, y = scale_y0, yend = scale_y0,
+      colour = "gray30", linewidth = 0.8
+    ) +
+    annotate("text", x = (scale_x0 + scale_x1) / 2, y = scale_y0,
+      label = "10 km", vjust = -0.8, size = 2.8, colour = "gray30")
+  if (has_ggspatial) {
+    p <- p +
+      ggspatial::annotation_north_arrow(
+        location = "tr",
+        which_north = "true",
+        height = unit(0.9, "cm"),
+        width = unit(0.9, "cm"),
+        style = ggspatial::north_arrow_orienteering
+      )
+  }
+  p
+}
+
+# ---- FIGURE 4: Allocation Residual Maps (Davao + Mexico) ----
+fig3_cities <- list("Davao City" = "PHI_DavaoCity", "Mexico City" = "MEX")
+fig3_crs <- list("Davao City" = 32651, "Mexico City" = 32614)  # UTM 51N, 14N
+fig3_list <- list()
+for (city in names(fig3_cities)) {
+  reg <- fig3_cities[[city]]
+  p <- build_residual_map(city, reg, fig3_crs[[city]])
+  if (!is.null(p)) fig3_list[[city]] <- p
 }
 if (length(fig3_list) >= 2) {
   if (has_patchwork) {
@@ -380,21 +422,75 @@ if (length(fig3_list) >= 2) {
         plot.subtitle = element_text(colour = "gray40", size = 9)
       )
     ggsave(file.path(out_dir, "Figure3_residual_maps.png"), combined3, width = 10, height = 5, dpi = 300)
-    ggsave(file.path(out_dir, "Figure3_residual_maps.pdf"), combined3, width = 10, height = 5)
+    # ggsave(file.path(out_dir, "Figure3_residual_maps.pdf"), combined3, width = 10, height = 5)
   } else if (requireNamespace("gridExtra", quietly = TRUE)) {
     png(file.path(out_dir, "Figure3_residual_maps.png"), width = 10, height = 5, units = "in", res = 300)
     gridExtra::grid.arrange(fig3_list[["Davao City"]], fig3_list[["Mexico City"]], ncol = 2,
       top = "Allocation Residual Maps (Davao | Mexico)")
     dev.off()
-    pdf(file.path(out_dir, "Figure3_residual_maps.pdf"), width = 10, height = 5)
-    gridExtra::grid.arrange(fig3_list[["Davao City"]], fig3_list[["Mexico City"]], ncol = 2,
-      top = "Allocation Residual Maps (Davao | Mexico)")
-    dev.off()
+    # pdf(file.path(out_dir, "Figure3_residual_maps.pdf"), width = 10, height = 5)
+    # gridExtra::grid.arrange(fig3_list[["Davao City"]], fig3_list[["Mexico City"]], ncol = 2,
+    #   top = "Allocation Residual Maps (Davao | Mexico)")
+    # dev.off()
   } else {
     ggsave(file.path(out_dir, "Figure3_residual_maps.png"), fig3_list[["Davao City"]], width = 6, height = 5, dpi = 300)
     message("Install patchwork or gridExtra for 2-panel Figure 3; saved Davao only")
   }
   message("Saved: Figure3_residual_maps.png/.pdf")
+}
+
+# ---- FIGURE 3b: Allocation Residual Maps (Nairobi, Mombasa, Cagayan de Oro) ----
+fig3b_cities <- list("Nairobi" = "KEN_Nairobi", "Mombasa" = "KEN_Mombasa", "Cagayan de Oro" = "PHI_CagayandeOroCity")
+fig3b_crs <- list("Nairobi" = 32737, "Mombasa" = 32737, "Cagayan de Oro" = 32651)  # UTM 37S Kenya, 51N Philippines
+fig3b_list <- list()
+for (city in names(fig3b_cities)) {
+  reg <- fig3b_cities[[city]]
+  p <- build_residual_map(city, reg, fig3b_crs[[city]])
+  if (!is.null(p)) fig3b_list[[city]] <- p
+}
+if (length(fig3b_list) >= 2) {
+  fig3b_order <- c("Nairobi", "Mombasa", "Cagayan de Oro")
+  fig3b_plots <- fig3b_list[intersect(fig3b_order, names(fig3b_list))]
+  n3b <- length(fig3b_plots)
+  if (has_patchwork) {
+    combined3b <- Reduce(`+`, fig3b_plots) +
+      patchwork::plot_layout(ncol = n3b, guides = "collect") &
+      theme(legend.position = "bottom", legend.direction = "horizontal")
+    combined3b <- combined3b +
+      patchwork::plot_annotation(
+        title = "Allocation Residual Maps (Other Cities)",
+        subtitle = "log(meta_share / worldpop_share) — Nairobi, Mombasa, Cagayan de Oro"
+      ) & theme(
+        plot.title = element_text(face = "bold", size = 12),
+        plot.subtitle = element_text(colour = "gray40", size = 9)
+      )
+    ggsave(file.path(out_dir, "Figure3_residual_maps_other.png"), combined3b, width = 12, height = 4.5, dpi = 300)
+    # ggsave(file.path(out_dir, "Figure3_residual_maps_other.pdf"), combined3b, width = 12, height = 4.5)
+  } else if (requireNamespace("gridExtra", quietly = TRUE)) {
+    png(file.path(out_dir, "Figure3_residual_maps_other.png"), width = 12, height = 4.5, units = "in", res = 300)
+    do.call(gridExtra::grid.arrange, c(fig3b_plots, list(ncol = n3b, top = "Allocation Residual Maps (Nairobi | Mombasa | Cagayan de Oro)")))
+    dev.off()
+    # pdf(file.path(out_dir, "Figure3_residual_maps_other.pdf"), width = 12, height = 4.5)
+    # do.call(gridExtra::grid.arrange, c(fig3b_plots, list(ncol = n3b, top = "Allocation Residual Maps (Nairobi | Mombasa | Cagayan de Oro)")))
+    # dev.off()
+  } else {
+    ggsave(file.path(out_dir, "Figure3_residual_maps_other.png"), fig3b_plots[[1]], width = 6, height = 5, dpi = 300)
+    message("Install patchwork or gridExtra for 3-panel Figure 3b; saved first panel only")
+  }
+  message("Saved: Figure3_residual_maps_other.png/.pdf")
+}
+
+# ---- Individual allocation residual maps (one file per city) ----
+all_residual_maps <- c(fig3_list, fig3b_list)
+for (city in names(all_residual_maps)) {
+  fname <- gsub(" ", "_", city)
+  ggsave(file.path(out_dir, paste0("Figure3_residual_map_", fname, ".png")),
+    all_residual_maps[[city]], width = 6, height = 5, dpi = 300)
+  # ggsave(file.path(out_dir, paste0("Figure3_residual_map_", fname, ".pdf")),
+  #   all_residual_maps[[city]], width = 6, height = 5)
+}
+if (length(all_residual_maps) > 0) {
+  message("Saved: Figure3_residual_map_{city}.png/.pdf for ", paste(names(all_residual_maps), collapse = ", "))
 }
 
 # ---- FIGURE 4: Poverty Effect (SEM tau forest plot) ----
@@ -439,7 +535,7 @@ if (nrow(fig4_data) > 0) {
       axis.ticks.y = element_line(colour = "gray70")
     )
   ggsave(file.path(out_dir, "Figure4_sem_forest.png"), p4, width = 7, height = 4, dpi = 300)
-  ggsave(file.path(out_dir, "Figure4_sem_forest.pdf"), p4, width = 7, height = 4)
+  # ggsave(file.path(out_dir, "Figure4_sem_forest.pdf"), p4, width = 7, height = 4)
   message("Saved: Figure4_sem_forest.png/.pdf")
 }
 
@@ -484,7 +580,7 @@ if (file.exists(tbl1_path) && file.exists(tbl2_path)) {
           panel.grid.minor = element_blank()
         )
       ggsave(file.path(out_dir, "Figure5_cross_city_scatter.png"), p5, width = 6, height = 5, dpi = 300)
-      ggsave(file.path(out_dir, "Figure5_cross_city_scatter.pdf"), p5, width = 6, height = 5)
+      # ggsave(file.path(out_dir, "Figure5_cross_city_scatter.pdf"), p5, width = 6, height = 5)
       message("Saved: Figure5_cross_city_scatter.png/.pdf")
     }
   }
@@ -494,7 +590,7 @@ if (file.exists(tbl1_path) && file.exists(tbl2_path)) {
 if (!is.null(p4) && !is.null(p5) && has_patchwork) {
   combined45 <- p4 + p5 + patchwork::plot_layout(ncol = 2, widths = c(1, 1))
   ggsave(file.path(out_dir, "Figure4_5_combined.png"), combined45, width = 12, height = 5, dpi = 300)
-  ggsave(file.path(out_dir, "Figure4_5_combined.pdf"), combined45, width = 12, height = 5)
+  # ggsave(file.path(out_dir, "Figure4_5_combined.pdf"), combined45, width = 12, height = 5)
   message("Saved: Figure4_5_combined.png/.pdf")
 }
 

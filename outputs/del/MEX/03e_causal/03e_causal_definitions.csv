@@ -1,6 +1,0 @@
-Component,Definition,Variable
-Treatment,T_i = 1 if poverty in top quartile,poverty_mean >= 75th percentile
-Outcome,Y_i = allocation_residual,log(meta_share / worldpop_share)
-Control_1,Distance to study centroid,Distance
-Control_2,Log population density,log(PopulationDensity + 1)
-Estimand,Target estimand (under conditional ignorability): τ = E[Y(1) - Y(0)],ATE; interpretation assumes unconfoundedness given controls

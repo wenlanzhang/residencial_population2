@@ -7,11 +7,12 @@
 if [ -n "${ZSH_VERSION:-}" ]; then
   exec /bin/bash "$0" "$@"
 fi
-# Usage: ./pipeline/run_all.sh [--no-basemap] [--region REGION] [--start-from STEP]
+# Usage: ./pipeline/run_all.sh [--no-basemap] [--region REGION | --all] [--start-from STEP]
 #   --no-basemap      Skip basemap tiles (avoids memory limit)
 #   --region REGION   Region code from config/regions.json:
 #                     PHI_CagayandeOroCity, PHI_DavaoCity, KEN_Nairobi, KEN_Mombasa, MEX, PRT
 #                     Sets data paths and output dirs: outputs/PHI_CagayandeOroCity/, etc.
+#   --all             Run pipeline for all regions (mutually exclusive with --region)
 #   --start-from STEP Start from this step (skips earlier steps). STEP: 01, 02, 03a, 03b, 03c, 03d, 03e, 03f
 #                     Example: --start-from 03b runs 03b, 03b_plots, 03c, ... through 03f_plots
 
@@ -23,30 +24,66 @@ SCRIPTS="$PROJECT_ROOT/pipeline"
 # Parse optional args
 R_ARGS=()
 REGION=""
+RUN_ALL=false
 START_FROM=""
+PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
   case $1 in
     --no-basemap)
       R_ARGS+=(--no-basemap)
+      PASSTHROUGH+=(--no-basemap)
       shift
       ;;
     --region)
       REGION="$2"
       shift 2
       ;;
+    --all)
+      RUN_ALL=true
+      shift
+      ;;
     --start-from)
       START_FROM="$2"
+      PASSTHROUGH+=(--start-from "$2")
       shift 2
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--no-basemap] [--region REGION] [--start-from STEP]"
+      echo "Usage: $0 [--no-basemap] [--region REGION | --all] [--start-from STEP]"
       echo "  REGION: PHI_CagayandeOroCity, PHI_DavaoCity, KEN_Nairobi, KEN_Mombasa, MEX, PRT — from config/regions.json"
       echo "  STEP: 01, 02, 03a, 03b, 03c, 03d, 03e, 03f"
       exit 1
       ;;
   esac
 done
+
+if [[ "$RUN_ALL" == true && -n "$REGION" ]]; then
+  echo "Error: Cannot use both --all and --region"
+  exit 1
+fi
+
+# When --all: run pipeline for each region
+if [[ "$RUN_ALL" == true ]]; then
+  REGIONS=$(python3 -c "
+import json
+with open('$PROJECT_ROOT/config/regions.json') as f:
+    r = json.load(f)
+print(' '.join(k for k in r if k != 'data_root'))
+")
+  echo "=========================================="
+  echo "Running pipeline for all regions"
+  echo "=========================================="
+  for r in $REGIONS; do
+    echo ""
+    echo ">>> Region: $r <<<"
+    /bin/bash "$0" --region "$r" "${PASSTHROUGH[@]}"
+  done
+  echo ""
+  echo "=========================================="
+  echo "Pipeline complete for all regions."
+  echo "=========================================="
+  exit 0
+fi
 
 # Output paths: region-specific (outputs/PHI/01, ...) or flat (outputs/01, ...) when no --region
 if [[ -n "$REGION" ]]; then
