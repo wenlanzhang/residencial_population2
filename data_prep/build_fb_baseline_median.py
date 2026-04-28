@@ -296,15 +296,23 @@ def main():
         print(f"\nDone. Built baseline for {len(regions)} regions.")
         return
 
-    # Single-region or no-region mode
+    # Single-region or prefix (PHI, KEN) mode
     if args.region:
         import region_config
 
-        cfg = region_config.get_region_config(args.region)
-        ref_hour = args.ref_hour if args.ref_hour is not None else cfg.get("pdc_ref_hour", 0)
-        if ref_hour not in (0, 8, 16):
-            raise ValueError(f"ref_hour must be 0, 8, or 16 (got {ref_hour})")
-        build_baseline_for_region(args.region, ref_hour, args)
+        regions = region_config.expand_region_to_list(args.region)
+        if not regions:
+            raise ValueError(f"No region matches '{args.region}'. Use PHI, KEN, MEX, PRT or full codes.")
+        if len(regions) > 1:
+            print(f"Building baseline for {args.region} ({len(regions)} regions): {', '.join(regions)}")
+        for region in regions:
+            cfg = region_config.get_region_config(region)
+            ref_hour = args.ref_hour if args.ref_hour is not None else cfg.get("pdc_ref_hour", 0)
+            if ref_hour not in (0, 8, 16):
+                raise ValueError(f"ref_hour must be 0, 8, or 16 (got {ref_hour}) for {region}")
+            build_baseline_for_region(region, ref_hour, args)
+        if len(regions) > 1:
+            print(f"\nDone. Built baseline for {len(regions)} regions.")
         return
 
     # No-region fallback (legacy)

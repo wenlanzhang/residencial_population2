@@ -2,6 +2,8 @@
 
 Horizontal run across multiple regions: steps 01, 02, 03c, then summary tables.
 
+**Per-region pipeline (full 01→…→03f) and `./run` options:** [`pipeline/PIPELINE.md`](../pipeline/PIPELINE.md).
+
 ## Output tables
 
 ### Table 1 — Meta vs WorldPop comparison
@@ -42,8 +44,12 @@ python cross-city/run_cross_city_table.py
 # Only aggregate from existing outputs (skip running steps)
 python cross-city/run_cross_city_table.py --aggregate-only
 
-# Limit to specific regions
+# Limit to specific regions (supports prefixes: PHI, KEN)
+python cross-city/run_cross_city_table.py --regions PHI,KEN,MEX
 python cross-city/run_cross_city_table.py --regions KEN_Nairobi,KEN_Mombasa,MEX,PHI_CagayandeOroCity
+
+# With reference hour (uses fb_baseline_median_h08.gpkg). Build baseline first with same hour.
+python cross-city/run_cross_city_table.py --ref-hour 8
 
 # Custom output directory
 python cross-city/run_cross_city_table.py -o outputs/cross-city/
@@ -55,7 +61,7 @@ python cross-city/run_cross_city_table.py -o outputs/cross-city/
 Rscript cross-city/figures_cross_city.R
 ```
 
-Produces: Figure 1 (spatial agreement log-log scatter), Figure (concentration ratio), Figure 2 (Lorenz curves), Figure 3 (residual maps), Figure 4 (SEM τ forest plot). Requires: sf, ggplot2, dplyr, tidyr, patchwork.
+Produces: **Figure1_spatial_agreement.png** (spatial agreement / log-log), **Figure_concentration_ratio.png**, **Figure2_lorenz_curves.png**, **Figure3_residual_maps.png** (and optional per-city / row variants), **Figure4_sem_forest.png**, **Figure5_cross_city_scatter.png** (and optional **Figure4_5_combined.png**). Requires: sf, ggplot2, dplyr, tidyr, patchwork.
 
 ## Prerequisites
 

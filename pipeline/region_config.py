@@ -54,7 +54,7 @@ def get_output_dir(region: str, step: str) -> Path:
 
 def get_input_path(region: str, step: str, filename: str) -> Path:
     """Input path for a step. E.g. outputs/PHI/01/harmonised_meta_worldpop.gpkg."""
-    prev_step = {"02": "01", "03a": "02", "03b": "02", "03c": "02", "03d": "02", "03e": "02", "03f": "02"}
+    prev_step = {"02": "01", "04": "02", "03a": "02", "03b": "02", "03c": "02", "03d": "02", "03e": "02", "03f": "02"}
     in_step = prev_step.get(step, "01")
     return get_output_dir(region, in_step) / filename
 
@@ -62,3 +62,16 @@ def get_input_path(region: str, step: str, filename: str) -> Path:
 def list_regions() -> list:
     """List available region codes."""
     return [k for k in load_regions().keys() if k != "data_root"]
+
+
+def expand_region_to_list(region_or_prefix: str) -> list:
+    """
+    Expand a region code or country prefix to a list of region codes.
+    PHI -> [PHI_CagayandeOroCity, PHI_DavaoCity]; KEN -> [KEN_Nairobi, KEN_Mombasa];
+    MEX -> [MEX]; PHI_CagayandeOroCity -> [PHI_CagayandeOroCity].
+    """
+    keys = list_regions()
+    if region_or_prefix in keys:
+        return [region_or_prefix]
+    matches = [k for k in keys if k.startswith(region_or_prefix)]
+    return matches

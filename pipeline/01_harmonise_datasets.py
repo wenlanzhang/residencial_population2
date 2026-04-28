@@ -72,6 +72,8 @@ def parse_args():
     p = argparse.ArgumentParser(description="Harmonise rasters to quadkey grid")
     p.add_argument("--region", type=str, default=None,
                    help="Region code from config/regions.json (PHI, KEN, MEX). Sets worldpop, meta, poverty, output paths.")
+    p.add_argument("--ref-hour", type=int, default=None, choices=[0, 8, 16], metavar="HOUR",
+                   help="Reference hour (0, 8, or 16). Uses outputs/{region}/fb_baseline_median_h{HOUR:02d}.gpkg. Overrides config meta path.")
     p.add_argument("--worldpop", type=Path, default=None, help="Override: WorldPop raster path")
     p.add_argument("--meta", type=Path, default=None, help="Override: Meta baseline GPKG path")
     p.add_argument("--poverty", type=Path, default=None, help="Override: Poverty raster or RWI CSV path")
@@ -99,7 +101,12 @@ def main():
         import region_config
         cfg = region_config.get_region_config(args.region)
         worldpop = args.worldpop or cfg["worldpop"]
-        meta_path = args.meta or cfg["meta"]
+        if args.meta is not None:
+            meta_path = args.meta
+        elif args.ref_hour is not None:
+            meta_path = PROJECT_ROOT / "outputs" / args.region / f"fb_baseline_median_h{args.ref_hour:02d}.gpkg"
+        else:
+            meta_path = cfg["meta"]
         poverty_path = args.poverty if args.poverty is not None else (None if args.no_poverty else cfg.get("poverty"))
         clip_shape_path = args.clip_shape or cfg.get("clip_shape")
         out_dir = region_config.get_output_dir(args.region, "01")

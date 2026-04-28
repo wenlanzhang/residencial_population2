@@ -4,18 +4,26 @@ Analysis pipeline comparing **Meta** and **WorldPop** residential population est
 
 ## Overview
 
-This project harmonises Meta Facebook baseline and WorldPop population rasters to a common quadkey grid, compares their spatial distributions, and investigates how poverty relates to residual bias (Meta underrepresentation relative to WorldPop). The pipeline includes:
+This project harmonises Meta Facebook baseline and WorldPop population rasters to a common quadkey grid, compares their spatial distributions, and investigates how poverty relates to residual bias (Meta underrepresentation relative to WorldPop).
+
+The pipeline includes:
 
 - Harmonisation to the Meta quadkey grid
-- **Script 02:** Summary stats, spatial agreement (Pearson/Spearman, log-log regression), rank agreement (Top-X overlap, Jaccard), distribution similarity (KS, EMD), inequality (Gini, Lorenz), spatial structure (Moran's I, LISA, Gi*, hotspot overlap), residual maps, agreement typology (HH/LL/HL/LH)
+- **Script 02:** Summary stats, spatial agreement (Pearson/Spearman, log-log regression), rank agreement (Top-X overlap, Jaccard), distribution similarity (KS, EMD), inequality (Gini, Lorenz), spatial structure (Moran's I, LISA, Gi*, hotspot overlap), residuals, agreement typology (HH/LL/HL/LH)
+- **Script 04:** Person-level allocation impact — counterfactual counts if one source’s total were spread with the other’s spatial pattern (summary table; optional maps and per-cell GPKG)
 - **Script 03a:** Associational models — Residual ~ Poverty + Distance + Density (covariate-adjusted), diagnostics (VIF, heteroskedasticity)
-- **Script 03c:** Spatial regression (SLM, SEM) only
-- Bivariate maps (Poverty × Residual)
+- **Script 03b:** Stratified analysis, Gini by poverty quintile, interactions
+- **Script 03c:** Spatial regression (SLM, SEM), including treatment effects (τ) vs OLS
+- **Script 03d:** Bivariate maps (Poverty × Residual) in R
+- **Script 03e:** Causal setup — treatment/outcome definitions, multiple estimators (regression, IPW, doubly robust)
+- **Script 03f:** Robustness — SEM and related checks under alternative specifications
+
+**Technical reference (single place):** **[`pipeline/PIPELINE.md`](pipeline/PIPELINE.md)** — `./run` options, Python+R step order with commands, script ↔ file mapping, output tree, publication-style figures. **`config/README.md`** explains `regions.json`; **`cross-city/README.md`** explains multi-city tables and figures.
 
 ## Prerequisites
 
 - **Python 3.9+** (with conda recommended: `conda activate geo_env_LLM`)
-- **R 4.0+** (for descriptive plots and bivariate maps)
+- **R 4.0+** for pipeline and cross-city plotting
 
 ### Python packages
 
@@ -31,6 +39,8 @@ Main dependencies: geopandas, rasterio, rasterstats, pandas, numpy, scipy, matpl
 install.packages(c("sf", "ggplot2", "dplyr", "patchwork", "biscale", "cowplot"))
 ```
 
+Cross-city scripts also need `tidyr`: see **`cross-city/README.md`**.
+
 ## Quick Start
 
 ### 1. Build Meta baseline (required before first run)
@@ -38,8 +48,10 @@ install.packages(c("sf", "ggplot2", "dplyr", "patchwork", "biscale", "cowplot"))
 The pipeline uses Meta PDC (Population During Crisis) data. Build the baseline GPKG first:
 
 ```bash
-# Single region (uses config: pdc_raw_dir, pdc_processed_csv, pdc_ref_hour)
+# Single region or country prefix (PHI = both Philippines cities, KEN = both Kenya cities)
 python data_prep/build_fb_baseline_median.py --region PHI_CagayandeOroCity
+python data_prep/build_fb_baseline_median.py --region PHI
+python data_prep/build_fb_baseline_median.py --region KEN
 
 # All regions at once
 python data_prep/build_fb_baseline_median.py --all
@@ -51,7 +63,7 @@ python data_prep/build_fb_baseline_median.py --all --ref-hour 8
 
 **Output:** `outputs/{REGION}/fb_baseline_median_h{00|08|16}.gpkg`
 
-**Reference hour:** Each region has `pdc_ref_hour` in `config/regions.json` (default 0). Use `--ref-hour` to override. If you use a non-default hour, update the `meta` path in `config/regions.json` to match (e.g. `fb_baseline_median_h08.gpkg` instead of `fb_baseline_median_h00.gpkg`).
+**Reference hour:** Each region has `pdc_ref_hour` in `config/regions.json` (default 0). Use `--ref-hour` to override when building. When running the pipeline, pass `--ref-hour` to use that baseline (e.g. `./run --region KEN_Nairobi --ref-hour 8` uses `fb_baseline_median_h08.gpkg`).
 
 **Manual paths (no config):**
 ```bash
@@ -61,145 +73,57 @@ python data_prep/build_fb_baseline_median.py -i outputs/PDC_Philippines_Basyang.
 
 ### 2. Run the pipeline
 
+**The one entry point** (Bash wrapper, zsh-safe) is **`./run`**, which calls `pipeline/run_all.sh`. It runs every Python step and the matching R script in the same order as the [manual recipe in `pipeline/PIPELINE.md`](pipeline/PIPELINE.md#manual-step-by-step-order) (01 → 02 → 04 → 03a–03f, with 01/02/03a–c/03e/03f each followed by their `*_plots.R` where applicable; 03d is R-only).
+
 ```bash
-# Single region (use ./run to avoid "zsh: number expected" on zsh)
+# Single region
 ./run --region PHI_CagayandeOroCity
 # Or: bash ./pipeline/run_all.sh --region PHI_CagayandeOroCity
 
-# All regions
-./run --all
-./run --all --no-basemap   # Skip basemap tiles (avoids network/memory issues)
+# Reference hour (build baseline with the same hour first)
+./run --region PHI_CagayandeOroCity --ref-hour 8
+./run --all --ref-hour 8
 
-# Other regions: KEN_Nairobi, KEN_Mombasa (Kenya), MEX (Mexico), PHI_DavaoCity
+./run --all
+./run --all --no-basemap          # Skip basemap tiles
+
+./run --region PHI                # Philippines cities
+./run --region KEN --no-basemap    # Nairobi + Mombasa
+
 ./run --region KEN_Nairobi
 ./run --region MEX --no-basemap
 
-# Start from a specific step (e.g. after changing 03b)
+# Resume: 01, 02, 04, 03a, 03b, 03c, 03d, 03e, or 03f — see PIPELINE.md
 ./run --region PHI_CagayandeOroCity --start-from 03b
+./run --region PHI_CagayandeOroCity --start-from 03f
 ```
 
-Or run step by step:
-
-```bash
-# 1. Harmonise (WorldPop + Meta + Poverty)
-python pipeline/01_harmonise_datasets.py --region PHI_CagayandeOroCity
-
-# 2. Compare Meta vs WorldPop (residuals, Table 1 & 2)
-python pipeline/02_compare_meta_worldpop.py --region PHI_CagayandeOroCity
-
-# 3a. Regression (Spearman, OLS, VIF, Moran's I)
-python pipeline/03a_regression.py -i outputs/PHI_CagayandeOroCity/02/harmonised_with_residual.gpkg -o outputs/PHI_CagayandeOroCity
-
-# 3b. Stratified analysis + inequality
-python pipeline/03b_stratified.py -i outputs/PHI_CagayandeOroCity/02/harmonised_with_residual.gpkg -o outputs/PHI_CagayandeOroCity
-
-# 3c. Spatial regression (SLM, SEM)
-python pipeline/03c_spatial_regression.py -i outputs/PHI_CagayandeOroCity/02/harmonised_with_residual.gpkg -o outputs/PHI_CagayandeOroCity
-
-# 3d. Bivariate map: Poverty × Residual
-Rscript pipeline/03d_bivariate_map_poverty_residual.R -i outputs/PHI_CagayandeOroCity/02/harmonised_with_residual.gpkg -o outputs/PHI_CagayandeOroCity/03d_bivariate --region PHI_CagayandeOroCity
-```
-
-**Note:** Scripts 03a, 03b, and 03d require `poverty_mean` in the 02 output. Run 01 with poverty (default); use `--no-poverty` only if skipping poverty analysis.
+To run scripts **manually** (or to see every `Rscript` line the wrapper uses), use only **[`pipeline/PIPELINE.md` → Manual step-by-step order](pipeline/PIPELINE.md#manual-step-by-step-order)** so the list is not duplicated here.
 
 ### 3. Cross-city comparison
 
-After running the pipeline for the regions you need (or `./run --all`):
+After running per-region pipelines (or `./run --all`):
 
 ```bash
-# Run 01 + 02 + 03c for all regions, then aggregate into summary tables
 python cross-city/run_cross_city_table.py
-
-# Only aggregate from existing outputs (skip re-running steps)
 python cross-city/run_cross_city_table.py --aggregate-only
-
-# Limit to specific regions
 python cross-city/run_cross_city_table.py --regions KEN_Nairobi,KEN_Mombasa,MEX,PHI_CagayandeOroCity
-
-# Custom output directory
 python cross-city/run_cross_city_table.py -o outputs/cross-city/
 ```
 
-**Cross-city figures (R):**
-```bash
-Rscript cross-city/figures_cross_city.R -o outputs/cross-city/
-```
+**Figures:** `Rscript cross-city/figures_cross_city.R -o outputs/cross-city/`
 
-Produces: Figure 1 (spatial agreement), Figure 2 (Lorenz curves), Figure 3 (residual maps), Figure 4 (SEM forest), Figure 5 (cross-city scatter). See `cross-city/README.md` for table definitions.
+Tables, figure filenames, and options: **`cross-city/README.md`**.
 
-## Pipeline
+## Data defaults
 
-| Script | Purpose | Input (default) | Output |
-|--------|---------|-----------------|--------|
-| **01** | Harmonise + descriptive maps | WorldPop, Meta, Poverty rasters | `outputs/{REGION}/01/` |
-| **02** | Compare Meta vs WorldPop, residuals | `01/harmonised_meta_worldpop.gpkg` | `outputs/{REGION}/02/` |
-| **03a** | Spearman, OLS, VIF, Moran's I | `02/harmonised_with_residual.gpkg` | `outputs/{REGION}/03a_regression/` |
-| **03b** | Stratified + Gini by poverty quintile | `02/harmonised_with_residual.gpkg` | `outputs/{REGION}/03b_stratified/` |
-| **03c** | Spatial regression (SLM, SEM) | `02/harmonised_with_residual.gpkg` | `outputs/{REGION}/03c_spatial_regression/` |
-| **03d** | Bivariate map: Poverty × Residual (R) | `02/harmonised_with_residual.gpkg` | `outputs/{REGION}/03d_bivariate/` |
-
-With `--region`, outputs go under `outputs/{REGION}/`. Cross-city tables and figures go to `outputs/cross-city/`.
-
-## Outputs
-
-```
-outputs/
-├── {REGION}/           # e.g. PHI_CagayandeOroCity, KEN_Nairobi, MEX
-│   ├── 01/
-│   │   ├── harmonised_meta_worldpop.gpkg
-│   │   ├── 01_data_overview.png
-│   │   ├── 01_bivariate_worldpop_meta.png
-│   │   └── 01_bivariate_worldpop_meta_basemap.png
-│   ├── 02/
-│   │   ├── harmonised_with_residual.gpkg
-│   │   ├── Table1_meta_worldpop_metrics.csv
-│   │   ├── 02_rank_agreement.csv
-│   │   ├── 02_distribution_histogram_kde.png
-│   │   ├── 02_lorenz_curves.png
-│   │   ├── 02_lisa_worldpop.png, 02_lisa_meta.png
-│   │   ├── 02_hotspot_overlap_map.png, 02_hotspot_overlap.csv
-│   │   ├── 02_agreement_typology.png
-│   │   └── ...
-│   ├── 03a_regression/
-│   │   ├── Table2_regression.csv
-│   │   ├── Table2b_VIF.csv
-│   │   └── Table2b_heteroskedasticity.csv
-│   ├── 03b_stratified/
-│   │   ├── Table_interaction.csv
-│   │   ├── Table3_poverty_strata.csv
-│   │   ├── Table4_gini_by_quintile.csv
-│   │   └── ...
-│   ├── 03c_spatial_regression/
-│   │   ├── Table_model_comparison.csv
-│   │   ├── Table3_SLM_SEM_coefficients.csv
-│   │   ├── slm_residual_map.png
-│   │   └── sem_residual_map.png
-│   └── 03d_bivariate/
-│       ├── 03d_bivariate_poverty_residual.png
-│       └── 03d_bivariate_poverty_residual_basemap.png
-└── cross-city/
-    ├── Table1_cross_city_table.csv
-    ├── Table2_poverty_effect_spatially_corrected.csv
-    ├── Figure1_spatial_agreement.png
-    ├── Figure2_lorenz_curves.png
-    ├── Figure3_residual_maps.png
-    └── ...
-```
-
-## Optional Scripts
-
-- **01_plot_descriptive.R** — Descriptive figures (data overview + bivariate): `Rscript pipeline/01_plot_descriptive.R` or `python pipeline/01_harmonise_datasets.py --plot`
-- **03d_bivariate_map_poverty_residual.R** — Poverty × Residual bivariate map: `Rscript pipeline/03d_bivariate_map_poverty_residual.R`
-
-## Data Defaults
-
-Scripts use default paths (e.g. for Nairobi/Kenya). Override with CLI arguments:
+Override defaults from `config/regions.json` with CLI flags, e.g.:
 
 ```bash
 python pipeline/01_harmonise_datasets.py --worldpop /path/to.tif --meta /path/to.gpkg --poverty /path/to/poverty.tif
-python pipeline/01_harmonise_datasets.py --filter-by both --filter-min 50   # keep quadkeys where both Meta & WorldPop ≥ 50
+python pipeline/01_harmonise_datasets.py --filter-by both --filter-min 50
 ```
 
 ## License
 
-See project license file.
+No `LICENSE` file is included yet. Add one before public release or redistribution if you need explicit terms.

@@ -15,6 +15,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -25,18 +26,26 @@ sys.path.insert(0, str(SCRIPTS))
 
 
 def get_regions(regions_arg=None):
-    """Get list of region codes from config (excluding data_root)."""
+    """Get list of region codes from config. Supports prefixes: PHI -> both PHI cities, KEN -> both Kenya cities."""
     import region_config
     all_regions = region_config.list_regions()
     if regions_arg:
         requested = [r.strip() for r in regions_arg.split(",") if r.strip()]
-        return [r for r in requested if r in all_regions]
+        result = []
+        for r in requested:
+            expanded = region_config.expand_region_to_list(r)
+            if not expanded:
+                continue
+            result.extend(expanded)
+        return list(dict.fromkeys(result))  # dedupe; empty if no matches
     return all_regions
 
 
-def run_step_01(region: str) -> bool:
+def run_step_01(region: str, ref_hour: Optional[int] = None) -> bool:
     """Run harmonisation for region. Returns True on success."""
     cmd = [sys.executable, str(SCRIPTS / "01_harmonise_datasets.py"), "--region", region]
+    if ref_hour is not None:
+        cmd.extend(["--ref-hour", str(ref_hour)])
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode == 0
 
@@ -236,6 +245,13 @@ def main():
         default=None,
         help="Output directory or Table 1 CSV path (default: outputs/cross-city/). Tables saved to same dir.",
     )
+    p.add_argument(
+        "--ref-hour",
+        type=int,
+        default=None,
+        choices=[0, 8, 16],
+        help="Reference hour for Meta baseline (0, 8, or 16). Uses fb_baseline_median_h{HOUR:02d}.gpkg.",
+    )
     args = p.parse_args()
 
     regions = get_regions(args.regions)
@@ -248,7 +264,7 @@ def main():
     if not args.aggregate_only:
         for region in regions:
             print(f"\n--- Running 01 + 02 + 03c for {region} ---")
-            if not run_step_01(region):
+            if not run_step_01(region, ref_hour=args.ref_hour):
                 print(f"  WARNING: Step 01 failed for {region}")
             if not run_step_02(region):
                 print(f"  WARNING: Step 02 failed for {region}")

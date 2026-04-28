@@ -2,6 +2,8 @@
 
 `regions.json` defines data paths and map settings for each study region.
 
+**Pipeline run order, manual commands, and outputs:** see [`pipeline/PIPELINE.md`](../pipeline/PIPELINE.md) (technical reference). This file focuses on **paths and adding regions**.
+
 ## Usage
 
 ```bash
