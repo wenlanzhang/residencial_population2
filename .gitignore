@@ -208,3 +208,7 @@ __marimo__/
 
 # Pipeline outputs — regenerate with ./run (PNGs, GPKGs, CSVs; large / not for version control)
 outputs/
+
+# macOS Finder metadata
+.DS_Store
+._*
