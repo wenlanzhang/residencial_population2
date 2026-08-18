@@ -11,6 +11,7 @@
 
 project_root <- "/Users/wenlanzhang/PycharmProjects/Residential_population2"
 config_path <- file.path(project_root, "config", "regions.json")
+GLOBAL_KEYS <- c("data_root", "poverty_source", "poverty_grdi")
 
 #' Load regions.json. Returns list of region configs.
 load_regions <- function() {
@@ -22,10 +23,16 @@ load_regions <- function() {
   jsonlite::read_json(config_path, simplifyVector = TRUE)
 }
 
+#' Region codes only (excludes top-level config keys).
+region_codes <- function(regions = NULL) {
+  if (is.null(regions)) regions <- load_regions()
+  setdiff(names(regions), GLOBAL_KEYS)
+}
+
 #' Get map_bbox for region code (PHI, KEN, MEX). Returns c(xmin, ymin, xmax, ymax) or NULL.
 get_map_bbox <- function(region_code) {
   regions <- load_regions()
-  if (is.null(regions) || !region_code %in% names(regions)) return(NULL)
+  if (is.null(regions) || !region_code %in% region_codes(regions)) return(NULL)
   bbox <- regions[[region_code]]$map_bbox
   if (is.null(bbox) || length(bbox) != 4) return(NULL)
   setNames(as.numeric(bbox), c("xmin", "ymin", "xmax", "ymax"))
@@ -38,7 +45,7 @@ get_region_from_path <- function(path) {
   if (is.na(idx) || idx >= length(parts)) return(NULL)
   cand <- parts[idx + 1]
   regions <- load_regions()
-  if (!is.null(regions) && cand %in% names(regions)) return(cand)
+  if (!is.null(regions) && cand %in% region_codes(regions)) return(cand)
   # Backward compat: KEN -> KEN_Nairobi
   if (cand == "KEN") return("KEN_Nairobi")
   if (toupper(cand) %in% c("PHI", "MEX", "PRT")) return(toupper(cand))
@@ -53,8 +60,7 @@ get_region_from_data <- function(gdf) {
   clat <- (b["ymin"] + b["ymax"]) / 2
   regions <- load_regions()
   if (is.null(regions)) return(NULL)
-  for (code in names(regions)) {
-    if (code == "data_root") next
+  for (code in region_codes(regions)) {
     cfg <- regions[[code]]
     lon_r <- cfg$lon_range
     lat_r <- cfg$lat_range

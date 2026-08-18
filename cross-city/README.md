@@ -8,13 +8,21 @@ Horizontal run across multiple regions: steps 01, 02, 03c, then summary tables.
 
 ### Table 1 — Meta vs WorldPop comparison
 
-| City | N Cells | Spearman ρ | Pearson r | ΔGini (Meta−WP) | Top 10% WP | Top 10% Meta | Δ Top 10% | Mean Residual |
-|------|---------|------------|-----------|-----------------|------------|--------------|-----------|---------------|
+| City | N cells (total) | Total WorldPop | … | N cells (valid) | Valid WorldPop | Valid area (km²) | Valid area (% of total) | Spearman ρ | … |
+|------|-----------------|----------------|---|-----------------|----------------|------------------|-------------------------|------------|---|
 | Nairobi | xxx | ... | ... | ... | ... | ... | ... | ... |
 | Mexico City | xxx | ... | ... | ... | ... | ... | ... | ... |
 | ... | ... | ... | ... | ... | ... | ... | ... | ... |
 
-- **N Cells**: Number of valid quadkeys (both WorldPop and Meta share > 0)
+- **N cells (total)** / **Total WorldPop** / **Total Meta (FB)** / **Total area (km²)**: Step **01** harmonised grid (all quadkeys, **including zeros**)
+- **N cells (valid)** / **Valid WorldPop** / **Valid Meta (FB)** / **Valid area (km²)**: Step **02** analysis grid (both shares > 0; zeros excluded)
+- **Valid WorldPop (% of total)** / **Valid Meta (% of total)**: Valid-cell population ÷ harmonised total (step 01) × 100 for each source
+- **Total area (% of city)**: Total harmonised grid area ÷ official city boundary (`clip_shape`) × 100
+- **Valid area (% of harmonised grid)**: Valid area ÷ total harmonised area × 100
+- **Valid area (% of city)**: Valid area ÷ city boundary × 100
+- **Spearman ρ, Pearson r, …**: Computed on the **valid** grid only (step 02)
+
+Step **01** GeoPackages keep all cells; step **02** and downstream scripts use the filtered analysis grid. The cross-city table reports **both** scopes side by side.
 - **Spearman ρ / Pearson r**: Correlation of log(meta_share) vs log(wp_share)
 - **ΔGini (Meta−WP)**: Gini(Meta) − Gini(WorldPop); positive = Meta more unequal
 - **Top 10% WP / Top 10% Meta**: Share of allocation in top 10% of cells (WorldPop, Meta)
@@ -50,6 +58,9 @@ python cross-city/run_cross_city_table.py --regions KEN_Nairobi,KEN_Mombasa,MEX,
 
 # With reference hour (uses fb_baseline_median_h08.gpkg). Build baseline first with same hour.
 python cross-city/run_cross_city_table.py --ref-hour 8
+
+# Poverty layer for step 01 (default: GRDI). Use Meta RWI instead:
+python cross-city/run_cross_city_table.py --poverty-source rwi
 
 # Custom output directory
 python cross-city/run_cross_city_table.py -o outputs/cross-city/

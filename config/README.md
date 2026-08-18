@@ -23,10 +23,12 @@
 
 ## Path resolution
 
-- **data_root** (top-level): Base path for external data. Paths for `worldpop`, `poverty`, and `pdc_raw_dir` are relative to this.
+- **data_root** (top-level): Base path for external data. Paths for `worldpop`, `poverty` (RWI CSV), and `pdc_raw_dir` are relative to this.
+- **poverty_source** (top-level): `grdi` (default) or `rwi`. Select with `./run --poverty-source rwi`.
+- **poverty_grdi** (top-level): Path to the global GRDI GeoTIFF, relative to the **project root** (default `data/povmap-grdi-v1-10.tif`). Not under `data_root`.
 - **Project paths**: `meta`, `clip_shape`, `pdc_processed_csv` are relative to the project root.
 - **meta** includes the reference hour: `outputs/{REGION}/fb_baseline_median_h{00|08|16}.gpkg`. Use the default-hour file for the pipeline, or pass `--meta` to 01_harmonise when using a different hour.
-- To use a different data location, change `data_root` only.
+- To use a different data location for WorldPop/PDC/RWI, change `data_root` only. GRDI stays in `data/` unless you change `poverty_grdi`.
 
 ## Adding a new region
 
@@ -37,7 +39,7 @@
   "name": "Country Name",
   "worldpop": "/path/to/worldpop_raster.tif",
   "meta": "outputs/fb_baseline_median_XXX.gpkg",
-  "poverty": "/path/to/rwi_or_poverty.csv",
+  "poverty": "/path/to/rwi.csv",
   "pdc_raw_dir": "/path/to/raw/PDC/CSV/folder",
   "pdc_processed_csv": "outputs/PDC_XXX.csv",
   "pdc_use_baseline_column": false,

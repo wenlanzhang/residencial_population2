@@ -29,6 +29,7 @@ The `run` script in the repo root is a thin wrapper: `exec bash pipeline/run_all
 | `--region CODE` | One region code, or a **prefix** that expands to all matches: `PHI` → both Philippines cities; `KEN` → Nairobi + Mombasa; or full codes: `PHI_CagayandeOroCity`, `PHI_DavaoCity`, `KEN_Nairobi`, `KEN_Mombasa`, `MEX`, `PRT`. |
 | `--all` | Run the pipeline for every region in `config/regions.json` (mutually exclusive with `--region`). |
 | `--ref-hour HOUR` | Meta baseline hour: **0**, **8**, or **16**. Must match a built file `outputs/{REGION}/fb_baseline_median_h{00|08|16}.gpkg` (build with `data_prep/build_fb_baseline_median.py --ref-hour …`). |
+| `--poverty-source SOURCE` | Poverty layer for step 01: **`grdi`** (default, `data/povmap-grdi-v1-10.tif`) or **`rwi`** (per-region Meta RWI CSV in `regions.json`). Re-run from 01 after switching. |
 | `--no-basemap` | Skip basemap tiles in R maps (less memory / no network). Forwarded to R scripts that support it. |
 | `--start-from STEP` | Skip all steps **before** `STEP` and run from there through **03f**. Valid: `01`, `02`, `04`, `03a`, `03b`, `03c`, `03d`, `03e`, `03f`. |
 
@@ -38,7 +39,7 @@ The `run` script in the repo root is a thin wrapper: `exec bash pipeline/run_all
 
 **Output layout:** With `--region REGION`, outputs go under `outputs/{REGION}/`. If you call `run_all.sh` **without** `--region` (not typical for multi-city work), scripts use the flat layout `outputs/01/`, `outputs/02/`, etc. See [config/README.md](../config/README.md).
 
-**Poverty-dependent steps:** 03a, 03b, 03d, 03e, and 03f require `poverty_mean` from step 01. Run 01 with poverty (default). Use `--no-poverty` on harmonise only if you skip those analyses.
+**Poverty-dependent steps:** 03a, 03b, 03d, 03e, and 03f require `poverty_mean` from step 01. Default poverty layer is **GRDI** (higher = more deprived). Pass `--poverty-source rwi` to use Meta RWI instead (`poverty_mean = -RWI`). Use `--no-poverty` on harmonise only if you skip those analyses.
 
 ---
 
@@ -86,7 +87,7 @@ OUT=outputs/$REGION
 G01=$OUT/01/harmonised_meta_worldpop.gpkg
 G02=$OUT/02/harmonised_with_residual.gpkg
 
-# 01 + descriptive R
+# 01 + descriptive R (default poverty: GRDI; add --poverty-source rwi for Meta RWI)
 python pipeline/01_harmonise_datasets.py --region $REGION
 Rscript pipeline/01_plot_descriptive.R -i "$G01" --region $REGION
 

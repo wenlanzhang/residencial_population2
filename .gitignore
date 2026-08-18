@@ -209,6 +209,10 @@ __marimo__/
 # Pipeline outputs — regenerate with ./run (PNGs, GPKGs, CSVs; large / not for version control)
 outputs/
 
+# GRDI raster (place at data/povmap-grdi-v1-10.tif; do not commit)
+data/povmap-grdi-v1-10.tif
+data/dataverse_files.zip
+
 # macOS Finder metadata
 .DS_Store
 ._*

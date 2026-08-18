@@ -117,7 +117,7 @@ if (use_log) df_dens <- df_dens %>% mutate(density = log10(density + 1))
 
 p1 <- ggplot(df_dens, aes(x = density, fill = source)) +
   geom_histogram(aes(y = after_stat(density)), bins = 40, alpha = 0.7, position = "identity") +
-  scale_fill_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+  scale_fill_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
   labs(
     x = if (use_log) "log₁₀(density + 1) [per km²]" else "Population density [per km²]",
     y = "Density",
@@ -137,8 +137,8 @@ df_dens2 <- bind_rows(
 p2 <- ggplot(df_dens2, aes(x = x, fill = source)) +
   geom_histogram(aes(y = after_stat(density)), bins = 40, alpha = 0.6, position = "identity") +
   geom_density(aes(colour = source), linewidth = 0.8, fill = NA) +
-  scale_fill_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
-  scale_colour_manual(values = c(WorldPop = "#2C3E50", Meta = "#8B3A3A"), guide = "none") +
+  scale_fill_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
+  scale_colour_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), guide = "none") +
   labs(
     x = if (use_log) "log₁₀(density + 1) [per km²]" else "Population density [per km²]",
     y = "Density",
@@ -158,7 +158,7 @@ p3 <- ggplot(df_scatter, aes(x = log_meta, y = log_wp)) +
   geom_hex(bins = 25) +
   scale_fill_gradient(low = "#E8F4F8", high = "#2166AC", name = "Count") +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey30", linewidth = 0.6) +
-  geom_abline(slope = slope, intercept = coef(fit)[1], colour = "#C75D4E", linewidth = 0.8) +
+  geom_abline(slope = slope, intercept = coef(fit)[1], colour = "#D46780", linewidth = 0.8) +
   annotate("label", x = min(log_meta, na.rm = TRUE), y = max(log_wp, na.rm = TRUE),
            label = sprintf("Slope = %.3f\nPearson r = %.3f", slope, r_pearson),
            hjust = 0, vjust = 1, fill = "white", alpha = 0.9) +
@@ -181,12 +181,12 @@ df_dist <- bind_rows(
 )
 p4a <- ggplot(df_dist, aes(x = value, fill = source)) +
   geom_histogram(aes(y = after_stat(density)), bins = 30, alpha = 0.7, position = "identity") +
-  scale_fill_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+  scale_fill_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
   labs(x = "Normalized value", y = "Density", title = "Histograms (normalized)") +
   theme_nature()
 p4b <- ggplot(df_dist, aes(x = value, colour = source)) +
   geom_density(linewidth = 0.8) +
-  scale_colour_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+  scale_colour_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
   labs(x = "Normalized value", y = "Density", title = "Kernel density") +
   theme_nature()
 if (requireNamespace("patchwork", quietly = TRUE)) {
@@ -209,7 +209,7 @@ df_lorenz <- bind_rows(
 p5 <- ggplot(df_lorenz, aes(x = pop, y = val, colour = source)) +
   geom_line(linewidth = 0.8) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40", linewidth = 0.4) +
-  scale_colour_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+  scale_colour_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
   coord_fixed(xlim = c(0, 1), ylim = c(0, 1)) +
   labs(
     x = "Cumulative share of quadkeys",
@@ -341,7 +341,7 @@ df_cc_log <- bind_rows(
 df_cc <- bind_rows(df_cc_lin, df_cc_log)
 p11 <- ggplot(df_cc, aes(x = x, y = y, colour = source)) +
   geom_line(linewidth = 0.8) +
-  scale_colour_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+  scale_colour_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
   facet_wrap(~panel, scales = "free_x", ncol = 2) +
   labs(
     x = "Population density",

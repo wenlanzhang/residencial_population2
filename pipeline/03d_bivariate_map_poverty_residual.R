@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 # 03d — Bivariate map: Poverty × Allocation residual (Digital invisibility hotspots)
 #
-# Poverty (MPI): high = more poverty
+# Poverty (higher = more deprived; GRDI default, or -RWI)
 # Allocation residual = log(meta_share / worldpop_share): negative = Meta under-allocates
 # Key quadrant: High poverty (3) + Negative residual (1) = 3-1 = Digital invisibility
 #

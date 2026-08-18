@@ -5,10 +5,12 @@ Step 1 — Harmonise all rasters to the quadkey grid.
 Aggregates to the exact Meta quadkey grid:
   - WorldPop (zonal sum)
   - Meta baseline (already in quadkeys)
-  - Poverty (zonal mean, optional via --poverty)
+  - Poverty (zonal mean). Default source is GRDI (GeoTIFF); Meta RWI CSV is optional.
 
 Usage:
   python pipeline/01_harmonise_datasets.py --worldpop /path/to.tif --meta /path/to.gpkg
+  python pipeline/01_harmonise_datasets.py --region KEN_Nairobi
+  python pipeline/01_harmonise_datasets.py --region KEN_Nairobi --poverty-source rwi
   python pipeline/01_harmonise_datasets.py --worldpop ... --meta ... --poverty /path/to/poverty.tif
   python pipeline/01_harmonise_datasets.py --filter-by meta --filter-min 50   # keep quadkeys with meta_baseline > 50
   python pipeline/01_harmonise_datasets.py --filter-by worldpop --filter-min 50   # keep quadkeys with worldpop_count > 50
@@ -41,7 +43,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASE = PROJECT_ROOT / "data"  # WorldPop, Poverty rasters; put files here or override with CLI
 DEFAULT_WORLDPOP = Path("/Users/wenlanzhang/Downloads/PhD_UCL/Data/Residential_population/worldpop/phl_pop_2026_CN_100m_R2025A_v1.tif")
 DEFAULT_META = PROJECT_ROOT / "outputs" / "fb_baseline_median_PHI.gpkg"  # from build_fb_baseline_median.py
-DEFAULT_POVERTY = Path("/Users/wenlanzhang/Downloads/PhD_UCL/Data/Meta/RWI/philippine_relative_wealth_index.csv")
+DEFAULT_POVERTY = PROJECT_ROOT / "data" / "povmap-grdi-v1-10.tif"
 
 
 def filter_quadkeys(gdf, by=None, min_val=50):
@@ -77,6 +79,14 @@ def parse_args():
     p.add_argument("--worldpop", type=Path, default=None, help="Override: WorldPop raster path")
     p.add_argument("--meta", type=Path, default=None, help="Override: Meta baseline GPKG path")
     p.add_argument("--poverty", type=Path, default=None, help="Override: Poverty raster or RWI CSV path")
+    p.add_argument(
+        "--poverty-source",
+        type=str,
+        default=None,
+        choices=["grdi", "rwi"],
+        help="Poverty layer: grdi (default, global GeoTIFF) or rwi (per-region Meta RWI CSV). "
+             "Ignored when --poverty is set, except to label the source.",
+    )
     p.add_argument("--no-poverty", action="store_true", help="Skip poverty aggregation")
     p.add_argument("--poverty-nodata", type=float, default=None)
     p.add_argument("-o", "--output", type=Path, default=None)
@@ -107,16 +117,44 @@ def main():
             meta_path = PROJECT_ROOT / "outputs" / args.region / f"fb_baseline_median_h{args.ref_hour:02d}.gpkg"
         else:
             meta_path = cfg["meta"]
-        poverty_path = args.poverty if args.poverty is not None else (None if args.no_poverty else cfg.get("poverty"))
+        if args.no_poverty:
+            poverty_path = None
+            poverty_source = None
+        elif args.poverty is not None:
+            poverty_path = args.poverty
+            poverty_source = args.poverty_source or (
+                "rwi" if Path(poverty_path).suffix.lower() == ".csv" else "grdi"
+            )
+        else:
+            poverty_source = args.poverty_source or cfg.get("poverty_source") or "grdi"
+            poverty_path = region_config.resolve_poverty_path(cfg, poverty_source)
         clip_shape_path = args.clip_shape or cfg.get("clip_shape")
         out_dir = region_config.get_output_dir(args.region, "01")
         print(f"Region: {args.region} ({cfg.get('name', args.region)})")
+        if not args.no_poverty:
+            print(f"Poverty source: {poverty_source} → {poverty_path}")
     else:
         worldpop = args.worldpop or DEFAULT_WORLDPOP
         meta_path = args.meta or DEFAULT_META
-        poverty_path = None if args.no_poverty else (args.poverty or DEFAULT_POVERTY)
+        if args.no_poverty:
+            poverty_path = None
+            poverty_source = None
+        elif args.poverty is not None:
+            poverty_path = args.poverty
+            poverty_source = args.poverty_source or (
+                "rwi" if Path(poverty_path).suffix.lower() == ".csv" else "grdi"
+            )
+        else:
+            poverty_source = args.poverty_source or "grdi"
+            if poverty_source == "rwi":
+                raise FileNotFoundError(
+                    "--poverty-source rwi requires --poverty PATH or --region (per-city RWI CSV in config)."
+                )
+            poverty_path = DEFAULT_POVERTY
         clip_shape_path = args.clip_shape
         out_dir = PROJECT_ROOT / "outputs" / "01"
+        if not args.no_poverty:
+            print(f"Poverty source: {poverty_source} → {poverty_path}")
 
     out_gpkg = args.output or (out_dir / "harmonised_meta_worldpop.gpkg")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -294,7 +332,7 @@ def main():
                 mercantile.quadkey(mercantile.tile(lon, lat, zoom))
                 for lon, lat in zip(lons, lats)
             ]
-            # RWI: higher = wealthier. Negate so poverty_mean: higher = poorer (consistent with MPI)
+            # RWI: higher = wealthier. Negate so poverty_mean: higher = poorer (same direction as GRDI).
             rwi_by_qk = df_rwi.groupby("quadkey")["rwi"].mean().reset_index()
             rwi_by_qk["poverty_mean"] = -rwi_by_qk["rwi"]
             rwi_by_qk = rwi_by_qk[["quadkey", "poverty_mean"]]
@@ -302,9 +340,10 @@ def main():
             meta["poverty_n_pixels"] = meta["quadkey"].map(
                 df_rwi.groupby("quadkey").size().reindex(meta["quadkey"]).fillna(0).astype(int)
             )
+            poverty_source = poverty_source or "rwi"
             print(f"  RWI: mean per quadkey, valid cells: {(meta['poverty_mean'].notna()).sum()}")
         else:
-            # Raster (e.g. .tif)
+            # Raster (e.g. GRDI GeoTIFF): higher = more deprived; do not negate.
             print("\n--- Aggregating poverty raster to quadkeys ---")
             zs_kw = {"stats": ["mean", "count"], "all_touched": True}
             if args.poverty_nodata is not None:
@@ -312,7 +351,10 @@ def main():
             stats_pov = zonal_stats(meta.geometry, str(poverty_path), **zs_kw)
             meta["poverty_mean"] = [s["mean"] if s["mean"] is not None else np.nan for s in stats_pov]
             meta["poverty_n_pixels"] = [s["count"] if s["count"] is not None else 0 for s in stats_pov]
+            poverty_source = poverty_source or "grdi"
             print(f"  Poverty: mean per quadkey, valid cells: {(meta['poverty_n_pixels'] > 0).sum()}")
+        if poverty_source:
+            meta["poverty_source"] = poverty_source
     else:
         if poverty_path is not None:
             print("\n*** Poverty SKIPPED (file missing or placeholder) — output will NOT include poverty_mean ***")

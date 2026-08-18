@@ -1,5 +1,7 @@
 {
   "data_root": "/Users/wenlanzhang/Downloads/PhD_UCL/Data",
+  "poverty_source": "grdi",
+  "poverty_grdi": "data/povmap-grdi-v1-10.tif",
   "PHI_CagayandeOroCity": {
     "name": "Philippines (Cagayan de Oro)",
     "pdc_ref_hour": 0,

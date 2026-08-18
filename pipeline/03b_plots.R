@@ -52,11 +52,11 @@ marg_path <- file.path(in_dir, "03b_marginal_effects_for_plots.csv")
 if (file.exists(marg_path)) {
   marg <- read.csv(marg_path)
   p_marg <- ggplot(marg, aes(x = poverty, y = pred)) +
-    geom_ribbon(aes(ymin = ci_lo, ymax = ci_hi), fill = "#4A90A4", alpha = 0.25) +
+    geom_ribbon(aes(ymin = ci_lo, ymax = ci_hi), fill = "#798234", alpha = 0.25) +
     geom_line(colour = "#2C3E50", linewidth = 1) +
     geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40", linewidth = 0.4) +
     labs(
-      x = "Poverty (MPI proportion)",
+      x = "Deprivation (higher = poorer)",
       y = "Predicted residual",
       title = "Marginal effect of poverty on allocation residual",
       subtitle = "At median population density (95% CI)"
@@ -78,7 +78,7 @@ if (file.exists(strata_path)) {
   p_box <- ggplot(strata, aes(x = poverty_strata, y = .data[[resid_col]], fill = poverty_strata)) +
     geom_boxplot(outlier.size = 1, outlier.alpha = 0.5) +
     geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40", linewidth = 0.4) +
-    scale_fill_manual(values = c("#5D8A66", "#4A90A4", "#C75D4E"), guide = "none") +
+    scale_fill_manual(values = c("#9aab6a", "#798234", "#D46780"), guide = "none") +
     labs(
       x = "Poverty stratum",
       y = "Allocation residual: log(meta_share / worldpop_share)",
@@ -105,7 +105,7 @@ if (file.exists(gini_path)) {
     tidyr::pivot_longer(cols = c(WorldPop, Meta), names_to = "Source", values_to = "Gini")
   p_gini <- ggplot(gini_long, aes(x = quintile, y = Gini, fill = Source)) +
     geom_col(position = position_dodge(width = 0.8), width = 0.7) +
-    scale_fill_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+    scale_fill_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
     labs(
       x = "Poverty quintile",
       y = "Gini coefficient",

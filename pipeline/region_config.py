@@ -12,9 +12,15 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config" / "regions.json"
 
+# Top-level keys in regions.json that are not region codes
+GLOBAL_KEYS = ("data_root", "poverty_source", "poverty_grdi")
+DEFAULT_POVERTY_SOURCE = "grdi"
+VALID_POVERTY_SOURCES = ("grdi", "rwi")
+DEFAULT_POVERTY_GRDI = PROJECT_ROOT / "data" / "povmap-grdi-v1-10.tif"
+
 
 def load_regions():
-    """Load regions.json. Returns dict region_code -> config."""
+    """Load regions.json. Returns dict region_code -> config (includes global keys)."""
     if not CONFIG_PATH.exists():
         raise FileNotFoundError(f"Region config not found: {CONFIG_PATH}")
     with open(CONFIG_PATH) as f:
@@ -29,13 +35,45 @@ def resolve_path(p: str, base: Path | None = None) -> Path:
     return path
 
 
+def get_poverty_source(regions: dict | None = None) -> str:
+    """Global default poverty source from config (`grdi` or `rwi`)."""
+    if regions is None:
+        regions = load_regions()
+    src = str(regions.get("poverty_source") or DEFAULT_POVERTY_SOURCE).strip().lower()
+    if src not in VALID_POVERTY_SOURCES:
+        raise ValueError(
+            f"Unknown poverty_source {src!r}. Use one of: {', '.join(VALID_POVERTY_SOURCES)}"
+        )
+    return src
+
+
+def resolve_poverty_path(cfg: dict, source: str | None = None) -> Path | None:
+    """
+    Active poverty file for a region config.
+
+    grdi → top-level poverty_grdi (project-root GeoTIFF)
+    rwi  → per-region poverty (RWI CSV under data_root)
+    """
+    src = (source or cfg.get("poverty_source") or DEFAULT_POVERTY_SOURCE)
+    src = str(src).strip().lower()
+    if src not in VALID_POVERTY_SOURCES:
+        raise ValueError(
+            f"Unknown poverty source {src!r}. Use one of: {', '.join(VALID_POVERTY_SOURCES)}"
+        )
+    if src == "grdi":
+        path = cfg.get("poverty_grdi")
+        return Path(path) if path else None
+    path = cfg.get("poverty")
+    return Path(path) if path else None
+
+
 def get_region_config(region: str) -> dict:
     """Get config for region (e.g. PHI, KEN, MEX). Resolves paths."""
     regions = load_regions()
     data_root = regions.get("data_root")
     if data_root:
         data_root = Path(data_root)
-    if region not in regions or region == "data_root":
+    if region not in regions or region in GLOBAL_KEYS:
         raise ValueError(f"Unknown region: {region}. Available: {list_regions()}")
     cfg = regions[region].copy()
     path_keys = ("worldpop", "meta", "poverty", "clip_shape", "pdc_raw_dir", "pdc_processed_csv")
@@ -44,6 +82,10 @@ def get_region_config(region: str) -> dict:
         if key in cfg and cfg[key]:
             base = data_root if (data_root and key in data_root_keys) else PROJECT_ROOT
             cfg[key] = resolve_path(cfg[key], base)
+
+    cfg["poverty_source"] = get_poverty_source(regions)
+    grdi = regions.get("poverty_grdi")
+    cfg["poverty_grdi"] = resolve_path(grdi, PROJECT_ROOT) if grdi else DEFAULT_POVERTY_GRDI
     return cfg
 
 
@@ -61,7 +103,7 @@ def get_input_path(region: str, step: str, filename: str) -> Path:
 
 def list_regions() -> list:
     """List available region codes."""
-    return [k for k in load_regions().keys() if k != "data_root"]
+    return [k for k in load_regions().keys() if k not in GLOBAL_KEYS]
 
 
 def expand_region_to_list(region_or_prefix: str) -> list:

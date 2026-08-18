@@ -119,7 +119,7 @@ def _detect_region(gdf):
     try:
         import region_config
         for code, cfg in region_config.load_regions().items():
-            if code == "data_root" or not isinstance(cfg, dict):
+            if code in region_config.GLOBAL_KEYS or not isinstance(cfg, dict):
                 continue
             lon_r = cfg.get("lon_range", [])
             lat_r = cfg.get("lat_range", [])

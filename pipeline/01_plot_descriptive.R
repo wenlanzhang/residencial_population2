@@ -69,7 +69,7 @@ while (i <= length(args)) {
     if (region_arg == "auto") region_arg <- NULL
     if (!is.null(region_arg)) {
       regions <- load_regions()
-      valid <- setdiff(names(regions), "data_root")
+      valid <- region_codes(regions)
       if (length(valid) > 0 && !region_arg %in% valid) {
         stop("--region must be a valid region from config (e.g. PHI_CagayandeOroCity, PHI_DavaoCity, KEN_Nairobi, KEN_Mombasa, MEX, PRT)")
       }
@@ -164,12 +164,13 @@ p_wp <- ggplot(gdf_plot) +
 p_wp <- add_coord(p_wp)
 
 has_poverty <- "poverty_mean" %in% names(gdf)
+pov_can_log <- has_poverty && all(gdf_plot$poverty_mean >= 0, na.rm = TRUE)
 if (has_poverty) {
   p_pov <- ggplot(gdf_plot) +
     geom_sf(aes(fill = poverty_mean), color = "white", linewidth = 0.12) +
-    scale_fill_viridis_c(option = "viridis", na.value = "grey95", name = "MPI proportion",
-      limits = c(0, NA), guide = guide_horizontal) +
-    labs(title = "Poverty (MPI mean)") +
+    scale_fill_viridis_c(option = "viridis", na.value = "grey95", name = "Deprivation",
+      guide = guide_horizontal) +
+    labs(title = "Deprivation (higher = poorer)") +
     theme_map()
   p_pov <- add_coord(p_pov)
   row1 <- p_meta + p_wp + p_pov
@@ -184,7 +185,7 @@ gdf_log <- gdf_plot %>%
   mutate(
     meta_log = log1p(meta_baseline),
     worldpop_log = log1p(worldpop_count),
-    poverty_log = if (has_poverty) log1p(poverty_mean) else NA_real_
+    poverty_log = if (has_poverty && pov_can_log) log1p(poverty_mean) else NA_real_
   )
 
 p_meta_log <- ggplot(gdf_log) +
@@ -203,12 +204,22 @@ p_wp_log <- ggplot(gdf_log) +
   theme_map()
 p_wp_log <- add_coord(p_wp_log)
 
-if (has_poverty) {
+if (has_poverty && pov_can_log) {
   p_pov_log <- ggplot(gdf_log) +
     geom_sf(aes(fill = poverty_log), color = "white", linewidth = 0.12) +
-    scale_fill_viridis_c(option = "viridis", na.value = "grey95", name = "log1p(MPI proportion)",
+    scale_fill_viridis_c(option = "viridis", na.value = "grey95", name = "log1p(deprivation)",
       guide = guide_horizontal) +
-    labs(title = "Poverty (log1p)") +
+    labs(title = "Deprivation (log1p)") +
+    theme_map()
+  p_pov_log <- add_coord(p_pov_log)
+  row2 <- p_meta_log + p_wp_log + p_pov_log
+} else if (has_poverty) {
+  # RWI-derived poverty_mean can be negative; plot native scale instead of log1p.
+  p_pov_log <- ggplot(gdf_plot) +
+    geom_sf(aes(fill = poverty_mean), color = "white", linewidth = 0.12) +
+    scale_fill_viridis_c(option = "viridis", na.value = "grey95", name = "Deprivation",
+      guide = guide_horizontal) +
+    labs(title = "Deprivation (higher = poorer)") +
     theme_map()
   p_pov_log <- add_coord(p_pov_log)
   row2 <- p_meta_log + p_wp_log + p_pov_log

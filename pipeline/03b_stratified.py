@@ -2,10 +2,11 @@
 """
 03b — Stratified comparison and Gini by poverty quintile.
 
-Residual by poverty stratum (Table 3), Gini by poverty quintile (Table 4).
+Residual by poverty stratum (Table 3), Gini by poverty quintile (Table 4),
+rank instability between Meta and WorldPop allocation shares (Table_rank_instability.csv).
 
 Usage:
-  python scripts/03b_stratified.py -i outputs/02_harmonised_with_residual.gpkg --project-crs EPSG:32737
+  python pipeline/03b_stratified.py -i outputs/{REGION}/02/harmonised_with_residual.gpkg -o outputs/{REGION} --project-crs EPSG:32737
 """
 
 import argparse
@@ -36,6 +37,18 @@ def gini_coefficient(x):
     return (2 * np.sum((np.arange(1, n + 1)) * x) - (n + 1) * np.sum(x)) / (n * np.sum(x))
 
 
+def _top_k_jaccard(scores_a: np.ndarray, scores_b: np.ndarray, k: float) -> tuple[float, int]:
+    """Jaccard overlap between indices of top-k cells by score (by descending score)."""
+    nloc = len(scores_a)
+    kk = max(1, min(int(round(k)), nloc))
+    top_a = set(np.argsort(-scores_a)[:kk].tolist())
+    top_b = set(np.argsort(-scores_b)[:kk].tolist())
+    uni = top_a | top_b
+    if not uni:
+        return float("nan"), kk
+    return len(top_a & top_b) / len(uni), kk
+
+
 def parse_args():
     p = argparse.ArgumentParser(description="03b — Stratified + inequality")
     p.add_argument("-i", "--input", type=Path, default=DEFAULT_INPUT)
@@ -56,6 +69,67 @@ def main():
     print("03b — Stratified Comparison + Gini by Poverty Quintile")
     print("=" * 60)
     print(f"  Valid quadkeys: {len(gdf)}")
+
+    # E. Rank instability (prioritisation of Meta vs WorldPop shares on this sample)
+    print("\n--- E. Rank instability ---")
+    wp_v = gdf["worldpop_count"].astype(float).fillna(0).values
+    meta_v = gdf["meta_baseline"].astype(float).fillna(0).values
+    n_r = len(gdf)
+    Tw = float(np.sum(wp_v))
+    Tm = float(np.sum(meta_v))
+    if n_r < 2 or Tw <= 0 or Tm <= 0:
+        print("  Skipped (need ≥2 cells and positive WP/Meta totals).")
+        rank_row = {
+            "n_cells": n_r,
+            "spearman_rho": float("nan"),
+            "spearman_p": float("nan"),
+            "kendall_tau": float("nan"),
+            "kendall_p": float("nan"),
+            "mean_abs_rank_gap_norm": float("nan"),
+            "jaccard_top_1pct": float("nan"),
+            "k_top_1pct": float("nan"),
+            "jaccard_top_5pct": float("nan"),
+            "k_top_5pct": float("nan"),
+            "jaccard_top_10pct": float("nan"),
+            "k_top_10pct": float("nan"),
+        }
+    else:
+        r_wp = stats.rankdata(wp_v, method="average")
+        r_meta = stats.rankdata(meta_v, method="average")
+        denom = (n_r - 1) if n_r > 1 else float("nan")
+        mean_abs_gap_norm = float(np.mean(np.abs(r_wp - r_meta)) / denom)
+        sp_rho, sp_p = stats.spearmanr(wp_v, meta_v)
+        kd_tau, kd_p = stats.kendalltau(wp_v, meta_v)
+        rank_row = {
+            "n_cells": n_r,
+            "spearman_rho": float(sp_rho) if sp_rho is not None and not np.isnan(sp_rho) else float("nan"),
+            "spearman_p": float(sp_p) if sp_p is not None and not np.isnan(sp_p) else float("nan"),
+            "kendall_tau": float(kd_tau) if kd_tau is not None and not np.isnan(kd_tau) else float("nan"),
+            "kendall_p": float(kd_p) if kd_p is not None and not np.isnan(kd_p) else float("nan"),
+            "mean_abs_rank_gap_norm": mean_abs_gap_norm,
+        }
+        for pct, key_j, key_k in (
+            (0.01, "jaccard_top_1pct", "k_top_1pct"),
+            (0.05, "jaccard_top_5pct", "k_top_5pct"),
+            (0.10, "jaccard_top_10pct", "k_top_10pct"),
+        ):
+            k_target = max(1, round(pct * n_r))
+            j1, k1 = _top_k_jaccard(wp_v, meta_v, k_target)
+            rank_row[key_j] = j1
+            rank_row[key_k] = int(k1)
+        print(
+            f"  Spearman ρ={rank_row['spearman_rho']:.4f}, Kendall τ={rank_row['kendall_tau']:.4f}, "
+            f"mean |Δrank|/(n−1)={rank_row['mean_abs_rank_gap_norm']:.4f}"
+        )
+        print(
+            f"  Top-K Jaccard (WP vs Meta hotspots): "
+            f"1%→{rank_row['jaccard_top_1pct']:.3f} (K={rank_row['k_top_1pct']}), "
+            f"5%→{rank_row['jaccard_top_5pct']:.3f} (K={rank_row['k_top_5pct']}), "
+            f"10%→{rank_row['jaccard_top_10pct']:.3f} (K={rank_row['k_top_10pct']})"
+        )
+    rank_path = out_dir / "Table_rank_instability.csv"
+    pd.DataFrame([rank_row]).to_csv(rank_path, index=False)
+    print(f"  Saved: {rank_path}")
 
     # A. Interaction term: Residual ~ Poverty + PopulationDensity + Poverty×PopulationDensity
     print("\n--- A. Interaction: Poverty × PopulationDensity ---")

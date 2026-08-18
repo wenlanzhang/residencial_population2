@@ -7,9 +7,10 @@
 if [ -n "${ZSH_VERSION:-}" ]; then
   exec /bin/bash "$0" "$@"
 fi
-# Usage: ./pipeline/run_all.sh [--no-basemap] [--ref-hour HOUR] [--region REGION | --all] [--start-from STEP]
+# Usage: ./pipeline/run_all.sh [--no-basemap] [--ref-hour HOUR] [--poverty-source grdi|rwi] [--region REGION | --all] [--start-from STEP]
 #   --no-basemap      Skip basemap tiles (avoids memory limit)
 #   --ref-hour HOUR   Reference hour for Meta baseline: 0, 8, or 16 (default: from config). Uses fb_baseline_median_h{HOUR:02d}.gpkg
+#   --poverty-source  Poverty layer: grdi (default, global GeoTIFF) or rwi (per-region Meta RWI CSV)
 #   --region REGION   Region code or country prefix from config/regions.json:
 #                     PHI = both PHI cities; KEN = both Kenya cities; MEX, PRT = single region
 #                     Full codes: PHI_CagayandeOroCity, PHI_DavaoCity, KEN_Nairobi, KEN_Mombasa, MEX, PRT
@@ -28,6 +29,7 @@ REGION=""
 RUN_ALL=false
 START_FROM=""
 REF_HOUR=""
+POVERTY_SOURCE=""
 PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -39,6 +41,11 @@ while [[ $# -gt 0 ]]; do
     --ref-hour)
       REF_HOUR="$2"
       PASSTHROUGH+=(--ref-hour "$2")
+      shift 2
+      ;;
+    --poverty-source)
+      POVERTY_SOURCE="$2"
+      PASSTHROUGH+=(--poverty-source "$2")
       shift 2
       ;;
     --region)
@@ -56,8 +63,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--no-basemap] [--ref-hour HOUR] [--region REGION | --all] [--start-from STEP]"
+      echo "Usage: $0 [--no-basemap] [--ref-hour HOUR] [--poverty-source grdi|rwi] [--region REGION | --all] [--start-from STEP]"
       echo "  HOUR: 0, 8, or 16 (Meta baseline reference hour)"
+      echo "  poverty-source: grdi (default) or rwi"
       echo "  REGION: PHI_CagayandeOroCity, PHI_DavaoCity, KEN_Nairobi, KEN_Mombasa, MEX, PRT — from config/regions.json"
       echo "  STEP: 01, 02, 04, 03a, 03b, 03c, 03d, 03e, 03f"
       exit 1
@@ -73,10 +81,10 @@ fi
 # When --all: run pipeline for each region
 if [[ "$RUN_ALL" == true ]]; then
   REGIONS=$(python3 -c "
-import json
-with open('$PROJECT_ROOT/config/regions.json') as f:
-    r = json.load(f)
-print(' '.join(k for k in r if k != 'data_root'))
+import sys
+sys.path.insert(0, '$PROJECT_ROOT/pipeline')
+import region_config
+print(' '.join(region_config.list_regions()))
 ")
   echo "=========================================="
   echo "Running pipeline for all regions"
@@ -96,19 +104,15 @@ fi
 # When --region: resolve prefix to region list (PHI -> both PHI cities, KEN -> both Kenya cities)
 if [[ -n "$REGION" ]]; then
   REGIONS=$(python3 -c "
-import json, sys
-with open('$PROJECT_ROOT/config/regions.json') as f:
-    r = json.load(f)
-keys = [k for k in r if k != 'data_root']
+import sys
+sys.path.insert(0, '$PROJECT_ROOT/pipeline')
+import region_config
 region = '$REGION'
-if region in keys:
-    print(region)
-else:
-    matches = [k for k in keys if k.startswith(region)]
-    if not matches:
-        print('', file=sys.stderr)
-        sys.exit(1)
-    print(' '.join(matches))
+matches = region_config.expand_region_to_list(region)
+if not matches:
+    print('', file=sys.stderr)
+    sys.exit(1)
+print(' '.join(matches))
 ")
   if [[ $? -ne 0 || -z "$REGIONS" ]]; then
     echo "Error: No region matches '$REGION'. Use PHI, KEN, MEX, PRT or full codes like PHI_CagayandeOroCity."
@@ -180,6 +184,7 @@ echo "Residential Population Pipeline"
 echo "=========================================="
 [[ -n "$REGION" ]] && echo "Region: $REGION (outputs in $OUT_ROOT/)" && echo ""
 [[ -n "$REF_HOUR" ]] && echo "Ref hour: $REF_HOUR (fb_baseline_median_h$(printf '%02d' "$REF_HOUR").gpkg)" && echo ""
+[[ -n "$POVERTY_SOURCE" ]] && echo "Poverty source: $POVERTY_SOURCE" && echo ""
 [[ -n "$START_FROM" ]] && echo "Starting from step: $START_FROM" && echo ""
 
 # 1. Harmonise
@@ -189,9 +194,12 @@ if _run_step "01"; then
   if [[ -n "$REGION" ]]; then
     HARMONISE_ARGS=(--region "$REGION")
     [[ -n "$REF_HOUR" ]] && HARMONISE_ARGS+=(--ref-hour "$REF_HOUR")
+    [[ -n "$POVERTY_SOURCE" ]] && HARMONISE_ARGS+=(--poverty-source "$POVERTY_SOURCE")
     python "$SCRIPTS/01_harmonise_datasets.py" "${HARMONISE_ARGS[@]}"
   else
-    python "$SCRIPTS/01_harmonise_datasets.py"
+    HARMONISE_ARGS=()
+    [[ -n "$POVERTY_SOURCE" ]] && HARMONISE_ARGS+=(--poverty-source "$POVERTY_SOURCE")
+    python "$SCRIPTS/01_harmonise_datasets.py" "${HARMONISE_ARGS[@]}"
   fi
 else
   echo ""
@@ -236,6 +244,9 @@ if _run_step "04"; then
   else
     python "$SCRIPTS/04_impact.py" -i "$GPKG_02" -o "$OUT_ROOT"
   fi
+  echo ""
+  echo "[5b/15] 04 allocation figures (04_plots.R)..."
+  Rscript "$SCRIPTS/04_plots.R" -i "$OUT_ROOT/04_impact" "${R_REGION_ARGS[@]}"
 else
   echo ""
   echo "[5/15] 04 impact skipped (--start-from $START_FROM)"

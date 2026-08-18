@@ -21,8 +21,11 @@ Usage:
   python pipeline/04_impact.py --region MEX --plot-map --save-gpkg
 
 Outputs (under outputs/{REGION}/04_impact/ by default):
-  Table4_impact_population_summary.csv
-  Optional: 04_delta_people_wp_total.png, 04_delta_people_meta_total.png, 04_impact_per_cell.gpkg
+  Table4_impact_population_summary.csv — includes share_mass_redistribution_M (half-L1 between share vectors).
+  Table4b_allocation_sensitivity.csv — budget share to high-poverty cells (poverty_mean ≥ p75) and allocation Gini;
+      rows: full_grid and analysis_sample_only (same mask as 03b) when residual + poverty allow.
+  Optional Python maps/GPKG: 04_delta_people_wp_total.png, 04_delta_people_meta_total.png, 04_impact_per_cell.gpkg
+  R figures: pipeline/04_plots.R — dumbbell (high-poverty shares), bar chart (M), combined Figure6_Operation_Impact; see script header for --cross-city.
 """
 
 from __future__ import annotations
@@ -53,6 +56,48 @@ def _resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:
     return inp, out_root
 
 
+def _gini_coefficient(x: np.ndarray) -> float:
+    """Gini coefficient (0 = equality, 1 = maximal inequality). Matches 03b formula."""
+    x = np.asarray(x, dtype=float)
+    x = x[~np.isnan(x) & (x >= 0)]
+    if len(x) < 2:
+        return float("nan")
+    x = np.sort(x)
+    n = len(x)
+    return float((2 * np.sum((np.arange(1, n + 1)) * x) - (n + 1) * np.sum(x)) / (n * np.sum(x)))
+
+
+def _allocation_sensitivity_block(
+    label: str,
+    region: str,
+    n_cells: int,
+    poverty_vals: np.ndarray,
+    s_wp: np.ndarray,
+    s_meta: np.ndarray,
+) -> dict:
+    """Budget B=1 proportional to shares; compare Meta vs WP share accruing to high-poverty (≥ p75) cells."""
+    q75 = float(np.nanpercentile(poverty_vals.astype(float), 75))
+    mask = poverty_vals.astype(float) >= q75
+    n_high = int(np.sum(mask))
+    share_wp_s = float(np.sum(s_wp[mask]))
+    share_meta_s = float(np.sum(s_meta[mask]))
+    gw = _gini_coefficient(s_wp)
+    gm = _gini_coefficient(s_meta)
+    return {
+        "sample_scope": label,
+        "region": region,
+        "n_cells": n_cells,
+        "q75_poverty": q75,
+        "n_high_poverty": n_high,
+        "share_wp_high_poverty": share_wp_s,
+        "share_meta_high_poverty": share_meta_s,
+        "diff_meta_minus_wp": share_meta_s - share_wp_s,
+        "gini_wp_alloc": gw,
+        "gini_meta_alloc": gm,
+        "delta_gini": gm - gw,
+    }
+
+
 def _metrics(delta: np.ndarray, total_ref: float) -> dict:
     abs_d = np.abs(delta)
     n = len(delta)
@@ -79,6 +124,12 @@ def parse_args():
     p.add_argument("--region", type=str, default=None, help="Region code; sets input/output paths via config")
     p.add_argument("--plot-map", action="store_true", help="Write choropleth maps of per-cell deltas")
     p.add_argument("--save-gpkg", action="store_true", help="Write per-cell GeoPackage with counterfactual columns")
+    p.add_argument(
+        "--project-crs",
+        type=str,
+        default="EPSG:32737",
+        help="CRS for 03b-aligned subsample (analysis_sample_only row); passed to poverty_utils",
+    )
     return p.parse_args()
 
 
@@ -130,6 +181,17 @@ def main():
     for k, v in m_meta.items():
         row[f"meta_ref_{k}"] = v
 
+    # Share-space mass redistribution: M = (1/2) * sum_i |s_meta_i - s_wp_i| (total variation distance).
+    M = 0.5 * float(np.nansum(np.abs(s_meta - s_wp)))
+    row["share_mass_redistribution_M"] = M
+    row["share_mass_redistribution_M_pct"] = 100.0 * M
+    expected_wp_l1 = T_wp * M
+    if not np.isclose(m_wp["l1_transfer"], expected_wp_l1, rtol=1e-9, atol=1e-6):
+        print(
+            f"  Note: wp_ref_l1_transfer ({m_wp['l1_transfer']:.6g}) vs T_wp*M ({expected_wp_l1:.6g}) — check inputs.",
+            file=sys.stderr,
+        )
+
     summary_path = out_dir / "Table4_impact_population_summary.csv"
     pd.DataFrame([row]).to_csv(summary_path, index=False)
 
@@ -142,7 +204,66 @@ def main():
     print(f"  sum(delta_meta_ref) = {row['sum_delta_meta_ref']:.6f} (expect ~0)")
     print(f"  wp_ref  L1 transfer (half L1): {m_wp['l1_transfer']:.2f}")
     print(f"  meta_ref L1 transfer (half L1): {m_meta['l1_transfer']:.2f}")
+    print(f"  Share mass redistribution M (half-L1 on shares): {M:.6f} ({100.0 * M:.4f}% of unit budget)")
     print(f"  Saved: {summary_path}")
+
+    # --- Allocation sensitivity (high poverty) + Gini on allocations (Table 4b) ---
+    if "poverty_mean" not in gdf.columns:
+        print(
+            "  Skipping Table4b_allocation_sensitivity.csv (no poverty_mean column).",
+            file=sys.stderr,
+        )
+    else:
+        sens_rows = []
+        pov_full = gdf["poverty_mean"].values
+        sens_rows.append(_allocation_sensitivity_block("full_grid", args.region or "", len(gdf), pov_full, s_wp, s_meta))
+
+        if "allocation_residual" in gdf.columns or "allocation_log_ratio" in gdf.columns:
+            try:
+                import poverty_utils
+
+                gdf_a = poverty_utils.load_and_prepare_gdf(
+                    input_path, args.project_crs, residual_col="allocation_residual"
+                )
+                wp_a = (
+                    gdf_a["worldpop_count"].astype(float).fillna(0).values
+                    if "worldpop_count" in gdf_a.columns
+                    else gdf_a[wp_col].astype(float).fillna(0).values
+                )
+                meta_a = (
+                    gdf_a["meta_baseline"].astype(float).fillna(0).values
+                    if "meta_baseline" in gdf_a.columns
+                    else gdf_a[meta_col].astype(float).fillna(0).values
+                )
+                Tw = float(np.nansum(wp_a))
+                Tm = float(np.nansum(meta_a))
+                if Tw > 0 and Tm > 0:
+                    sens_rows.append(
+                        _allocation_sensitivity_block(
+                            "analysis_sample_only",
+                            args.region or "",
+                            len(gdf_a),
+                            gdf_a["poverty_mean"].values,
+                            wp_a / Tw,
+                            meta_a / Tm,
+                        )
+                    )
+                else:
+                    print(
+                        "  Skipping analysis_sample_only row (non-positive totals on 03b subsample).",
+                        file=sys.stderr,
+                    )
+            except Exception as exc:
+                print(f"  Skipping analysis_sample_only row: {exc}", file=sys.stderr)
+        else:
+            print(
+                "  Skipping analysis_sample_only row (no allocation_residual; run step 02).",
+                file=sys.stderr,
+            )
+
+        tbl4b_path = out_dir / "Table4b_allocation_sensitivity.csv"
+        pd.DataFrame(sens_rows).to_csv(tbl4b_path, index=False)
+        print(f"  Saved: {tbl4b_path}")
 
     if args.save_gpkg:
         out_gdf = gdf.copy()
