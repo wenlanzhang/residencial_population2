@@ -12,6 +12,7 @@ From the **repository root**, use the wrapper (always Bash — avoids zsh issues
 
 ```bash
 ./run --region PHI_CagayandeOroCity
+./run --region IDN_Medan,IDN_BandaAceh,LKA_Colombo,LKA_Kandy,COL_Barranquilla,COL_Cartagena,ECU_Cuenca,ECU_Guayaquil,ZAF_CapeTown,ZAF_GardenRoute
 ```
 
 This is equivalent to:
@@ -26,10 +27,11 @@ The `run` script in the repo root is a thin wrapper: `exec bash pipeline/run_all
 
 | Option | Meaning |
 |--------|---------|
-| `--region CODE` | One region code, or a **prefix** that expands to all matches: `PHI` → both Philippines cities; `KEN` → Nairobi + Mombasa; or full codes: `PHI_CagayandeOroCity`, `PHI_DavaoCity`, `KEN_Nairobi`, `KEN_Mombasa`, `MEX`, `PRT`. |
+| `--region CODE` | One region code, a **comma-separated list**, or a **prefix** that expands to all matches: `PHI` → all Philippines cities; `KEN` → all Kenya cities. Event extracts: `IDN`, `LKA`, `COL`, `ECU`, `ZAF`. Cities: `IDN_Medan`, `IDN_BandaAceh`, `LKA_Colombo`, `LKA_Kandy`, `COL_Barranquilla`, `COL_Cartagena`, `ECU_Cuenca`, `ECU_Guayaquil`, `ZAF_CapeTown`, `ZAF_GardenRoute`. |
 | `--all` | Run the pipeline for every region in `config/regions.json` (mutually exclusive with `--region`). |
-| `--ref-hour HOUR` | Meta baseline hour: **0**, **8**, or **16**. Must match a built file `outputs/{REGION}/fb_baseline_median_h{00|08|16}.gpkg` (build with `data_prep/build_fb_baseline_median.py --ref-hour …`). |
+| `--ref-hour HOUR` | Meta baseline hour: **0**, **8**, or **16**. Uses `outputs/{REGION}/fb_baseline_median_h{00|08|16}.gpkg`. If that file is missing, `./run` builds it from the PDC zip before step 01. |
 | `--poverty-source SOURCE` | Poverty layer for step 01: **`grdi`** (default, `data/povmap-grdi-v1-10.tif`) or **`rwi`** (per-region Meta RWI CSV in `regions.json`). Re-run from 01 after switching. |
+| `--clip-source SOURCE` | City boundary for step 01: **`local`** (default, `clip_shape` file), **`osm`** (OSMnx/Nominatim), or **`geob`** (geoBoundaries). See [`config/README.md`](../config/README.md). Re-run from 01 after switching. `--clip-refresh` ignores the download cache. |
 | `--no-basemap` | Skip basemap tiles in R maps (less memory / no network). Forwarded to R scripts that support it. |
 | `--start-from STEP` | Skip all steps **before** `STEP` and run from there through **03f**. Valid: `01`, `02`, `04`, `03a`, `03b`, `03c`, `03d`, `03e`, `03f`. |
 

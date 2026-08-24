@@ -5,13 +5,13 @@
 # get_map_bbox(region_code)     -> c(xmin, ymin, xmax, ymax) or NULL
 # get_map_bbox_from_path(path)  -> bbox for region inferred from path (outputs/KEN/02/... -> KEN)
 # get_map_bbox_from_data(gdf)   -> bbox for region inferred from data centroid (lon_range, lat_range)
-# get_map_bbox_for_plot()       -> when clip_shape is set, uses data extent instead of map_bbox
+# get_map_bbox_for_plot()       -> when a city clip is set, uses data extent instead of map_bbox
 # coord_from_bbox(bbox)         -> coord_sf for ggplot
 # clip_gdf_to_bbox(gdf, bbox)   -> clipped sf object for plotting
 
 project_root <- "/Users/wenlanzhang/PycharmProjects/Residential_population2"
 config_path <- file.path(project_root, "config", "regions.json")
-GLOBAL_KEYS <- c("data_root", "poverty_source", "poverty_grdi")
+GLOBAL_KEYS <- c("data_root", "poverty_source", "poverty_grdi", "clip_source")
 
 #' Load regions.json. Returns list of region configs.
 load_regions <- function() {
@@ -48,7 +48,7 @@ get_region_from_path <- function(path) {
   if (!is.null(regions) && cand %in% region_codes(regions)) return(cand)
   # Backward compat: KEN -> KEN_Nairobi
   if (cand == "KEN") return("KEN_Nairobi")
-  if (toupper(cand) %in% c("PHI", "MEX", "PRT")) return(toupper(cand))
+  if (toupper(cand) %in% c("PHI", "MEX")) return(toupper(cand))
   NULL
 }
 
@@ -74,17 +74,22 @@ get_region_from_data <- function(gdf) {
 }
 
 #' Get map_bbox: first from region arg, then from path, then from data. Returns named vector or NULL.
-#' When clip_shape is set for the region: uses data extent (data is already clipped) instead of map_bbox.
+#' When a city clip is configured: uses data extent (data is already clipped) instead of map_bbox.
 get_map_bbox_for_plot <- function(region_arg = NULL, input_path = NULL, gdf = NULL) {
   regions <- load_regions()
   reg <- NULL
   if (!is.null(region_arg) && nzchar(region_arg)) reg <- toupper(region_arg)
   if (is.null(reg) && !is.null(input_path)) reg <- get_region_from_path(input_path)
   if (is.null(reg) && !is.null(gdf)) reg <- get_region_from_data(gdf)
-  # When clip_shape is set: use data extent (data is already clipped to study area)
-  if (!is.null(reg) && reg %in% names(regions) && !is.null(regions[[reg]]$clip_shape) &&
-      !is.null(gdf) && inherits(gdf, "sf") && nrow(gdf) > 0) {
-    return(as.numeric(sf::st_bbox(gdf)))
+  # When the region is clipped (local file or OSM/geoBoundaries): use data extent
+  if (!is.null(reg) && reg %in% names(regions) && !is.null(gdf) && inherits(gdf, "sf") && nrow(gdf) > 0) {
+    clip_src <- regions[[reg]]$clip_source
+    if (is.null(clip_src)) clip_src <- regions$clip_source
+    has_local <- !is.null(regions[[reg]]$clip_shape)
+    has_online <- !is.null(clip_src) && clip_src %in% c("osm", "geob")
+    if (has_local || has_online) {
+      return(as.numeric(sf::st_bbox(gdf)))
+    }
   }
   # 1. Explicit --region
   if (!is.null(reg)) {

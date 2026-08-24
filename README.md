@@ -47,47 +47,27 @@ Cross-city scripts also need `tidyr`: see `cross-city/README.md`.
 
 
 
-### 1. Build Meta baseline (required before first run)
+### 1. Run the pipeline
 
-The pipeline uses Meta PDC (Population During Crisis) data. Build the baseline GPKG first:
-
-```bash
-# Single region or country prefix (PHI = both Philippines cities, KEN = both Kenya cities)
-python data_prep/build_fb_baseline_median.py --region PHI_CagayandeOroCity
-python data_prep/build_fb_baseline_median.py --region PHI
-python data_prep/build_fb_baseline_median.py --region KEN
-
-# All regions at once
-python data_prep/build_fb_baseline_median.py --all
-
-# With a specific reference hour (0, 8, or 16). Default is 0 (midnight) from config.
-python data_prep/build_fb_baseline_median.py --region KEN_Nairobi --ref-hour 8
-python data_prep/build_fb_baseline_median.py --all --ref-hour 8
-```
-
-**Output:** `outputs/{REGION}/fb_baseline_median_h{00|08|16}.gpkg`
-
-**Reference hour:** Each region has `pdc_ref_hour` in `config/regions.json` (default 0). Use `--ref-hour` to override when building. When running the pipeline, pass `--ref-hour` to use that baseline (e.g. `./run --region KEN_Nairobi --ref-hour 8` uses `fb_baseline_median_h08.gpkg`).
-
-**Manual paths (no config):**
+**The one entry point** (Bash wrapper, zsh-safe) is `./run`, which calls `pipeline/run_all.sh`. If the Meta baseline GPKG is missing, it is built from the PDC zip first, then every Python step and the matching R script run in the same order as the [manual recipe in](pipeline/PIPELINE.md#manual-step-by-step-order) `pipeline/PIPELINE.md` (01 → 02 → 04 → 03a–03f, with 01/02/03a–c/03e/03f each followed by their `*_plots.R` where applicable; 03d is R-only).
 
 ```bash
-python data_prep/build_fb_baseline_median.py -i /path/to/raw/PDC/folder -o outputs/fb_baseline_median.gpkg
-python data_prep/build_fb_baseline_median.py -i outputs/PDC_Philippines_Basyang.csv -o outputs/fb_baseline_median.gpkg
-```
-
-
-
-### 2. Run the pipeline
-
-**The one entry point** (Bash wrapper, zsh-safe) is `./run`, which calls `pipeline/run_all.sh`. It runs every Python step and the matching R script in the same order as the [manual recipe in](pipeline/PIPELINE.md#manual-step-by-step-order) `pipeline/PIPELINE.md` (01 → 02 → 04 → 03a–03f, with 01/02/03a–c/03e/03f each followed by their `*_plots.R` where applicable; 03d is R-only).
-
-```bash
-# Single region
+# Single region (builds Meta baseline if needed, then runs the pipeline)
 ./run --region PHI_CagayandeOroCity
+./run --region IDN_Medan
+
+# City clips for the new events (OSM; does not overwrite outputs/IDN etc.)
+./run --region IDN_Medan,IDN_BandaAceh,LKA_Colombo,LKA_Kandy,COL_Barranquilla,COL_Cartagena,ECU_Cuenca,ECU_Guayaquil,ZAF_CapeTown,ZAF_GardenRoute
+
+# Event-level extract (no city clip; slow)
+./run --region IDN
+
+# Country prefix (PHI = all Philippines cities, KEN = all Kenya cities)
+./run --region PHI
+./run --region KEN
 # Or: bash ./pipeline/run_all.sh --region PHI_CagayandeOroCity
 
-# Reference hour (build baseline with the same hour first)
+# Reference hour (baseline is built for that hour if the GPKG is missing)
 ./run --region PHI_CagayandeOroCity --ref-hour 8
 ./run --all --ref-hour 8
 
@@ -103,6 +83,10 @@ python data_prep/build_fb_baseline_median.py -i outputs/PDC_Philippines_Basyang.
 # Poverty layer (default: GRDI). Use Meta RWI instead:
 ./run --region KEN_Nairobi --poverty-source rwi
 
+# City boundary (default: local clip_shape file). OSM or geoBoundaries:
+./run --region KEN_Nairobi --clip-source osm
+./run --region KEN_Nairobi --clip-source geob
+
 # Resume: 01, 02, 04, 03a, 03b, 03c, 03d, 03e, or 03f — see PIPELINE.md
 ./run --region PHI_CagayandeOroCity --start-from 03b
 ./run --region PHI_CagayandeOroCity --start-from 03f
@@ -110,7 +94,7 @@ python data_prep/build_fb_baseline_median.py -i outputs/PDC_Philippines_Basyang.
 
 To run scripts **manually** (or to see every `Rscript` line the wrapper uses), use only `pipeline/PIPELINE.md` **[→ Manual step-by-step order](pipeline/PIPELINE.md#manual-step-by-step-order)** so the list is not duplicated here.
 
-### 3. Cross-city comparison
+### 2. Cross-city comparison
 
 After running per-region pipelines (or `./run --all`):
 
@@ -127,7 +111,7 @@ Tables, figure filenames, and options: `cross-city/README.md`.
 
 ## Data defaults
 
-Poverty defaults to **GRDI v1.10** at `data/povmap-grdi-v1-10.tif` (global GeoTIFF; place the file there, it is gitignored). Per-region Meta RWI CSVs stay in `config/regions.json` under `poverty` for `--poverty-source rwi`.
+Poverty defaults to **GRDI v1.10** at `data/povmap-grdi-v1-10.tif` (global GeoTIFF; place the file there, it is gitignored). WorldPop country rasters live in `data/worldpop/` (also gitignored). Per-region Meta RWI CSVs stay in `config/regions.json` under `poverty` for `--poverty-source rwi`.
 
 Override defaults from `config/regions.json` with CLI flags, e.g.:
 

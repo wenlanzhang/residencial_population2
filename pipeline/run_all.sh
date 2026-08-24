@@ -7,16 +7,24 @@
 if [ -n "${ZSH_VERSION:-}" ]; then
   exec /bin/bash "$0" "$@"
 fi
-# Usage: ./pipeline/run_all.sh [--no-basemap] [--ref-hour HOUR] [--poverty-source grdi|rwi] [--region REGION | --all] [--start-from STEP]
+# Usage: ./pipeline/run_all.sh [--no-basemap] [--ref-hour HOUR] [--poverty-source grdi|rwi] [--clip-source local|osm|geob] [--region REGION | --all] [--start-from STEP]
 #   --no-basemap      Skip basemap tiles (avoids memory limit)
 #   --ref-hour HOUR   Reference hour for Meta baseline: 0, 8, or 16 (default: from config). Uses fb_baseline_median_h{HOUR:02d}.gpkg
 #   --poverty-source  Poverty layer: grdi (default, global GeoTIFF) or rwi (per-region Meta RWI CSV)
+#   --clip-source     City boundary: local (downloaded gpkg, default), osm (OSMnx/Nominatim), or geob (geoBoundaries)
+#   --clip-refresh    Re-download OSM/geoBoundaries even if cached
 #   --region REGION   Region code or country prefix from config/regions.json:
-#                     PHI = both PHI cities; KEN = both Kenya cities; MEX, PRT = single region
-#                     Full codes: PHI_CagayandeOroCity, PHI_DavaoCity, KEN_Nairobi, KEN_Mombasa, MEX, PRT
+#                     PHI = all PHI cities; KEN = all Kenya cities; MEX = Mexico City
+#                     Also: IDN, LKA, COL, ECU, ZAF (event-level, no city clip)
+#                     Cities: IDN_Medan, LKA_Colombo, COL_Barranquilla, ECU_Cuenca, ZAF_CapeTown
+#                     Full codes: PHI_CagayandeOroCity, PHI_DavaoCity, PHI_ZamboangaCity, PHI_GeneralSantosCity,
+#                     KEN_Nairobi, KEN_Mombasa, KEN_Kisumu, KEN_Nakuru, MEX, MEX_Puebla, MEX_Leon,
+#                     IDN, LKA, COL, ECU, ZAF, IDN_Medan, LKA_Colombo, COL_Barranquilla, ECU_Cuenca, ZAF_CapeTown
 #   --all             Run pipeline for all regions (mutually exclusive with --region)
+#                     Comma-separated codes also work: --region IDN,LKA,COL,ECU,ZAF
 #   --start-from STEP Start from this step (skips earlier steps). STEP: 01, 02, 04, 03a, 03b, 03c, 03d, 03e, 03f
 #                     Example: --start-from 03b runs 03b, 03b_plots, 03c, ... through 03f_plots
+# Missing Meta baseline GPKGs are built from the PDC zip before step 01.
 
 set -e
 cd "$(dirname "$0")/.."
@@ -30,6 +38,8 @@ RUN_ALL=false
 START_FROM=""
 REF_HOUR=""
 POVERTY_SOURCE=""
+CLIP_SOURCE=""
+CLIP_REFRESH=false
 PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -48,6 +58,16 @@ while [[ $# -gt 0 ]]; do
       PASSTHROUGH+=(--poverty-source "$2")
       shift 2
       ;;
+    --clip-source)
+      CLIP_SOURCE="$2"
+      PASSTHROUGH+=(--clip-source "$2")
+      shift 2
+      ;;
+    --clip-refresh)
+      CLIP_REFRESH=true
+      PASSTHROUGH+=(--clip-refresh)
+      shift
+      ;;
     --region)
       REGION="$2"
       shift 2
@@ -63,10 +83,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--no-basemap] [--ref-hour HOUR] [--poverty-source grdi|rwi] [--region REGION | --all] [--start-from STEP]"
+      echo "Usage: $0 [--no-basemap] [--ref-hour HOUR] [--poverty-source grdi|rwi] [--clip-source local|osm|geob] [--region REGION | --all] [--start-from STEP]"
       echo "  HOUR: 0, 8, or 16 (Meta baseline reference hour)"
       echo "  poverty-source: grdi (default) or rwi"
-      echo "  REGION: PHI_CagayandeOroCity, PHI_DavaoCity, KEN_Nairobi, KEN_Mombasa, MEX, PRT — from config/regions.json"
+      echo "  clip-source: local (default), osm, or geob"
+      echo "  REGION: PHI_CagayandeOroCity, KEN_Nairobi, MEX, IDN, LKA, COL, ECU, ZAF — from config/regions.json"
       echo "  STEP: 01, 02, 04, 03a, 03b, 03c, 03d, 03e, 03f"
       exit 1
       ;;
@@ -115,7 +136,7 @@ if not matches:
 print(' '.join(matches))
 ")
   if [[ $? -ne 0 || -z "$REGIONS" ]]; then
-    echo "Error: No region matches '$REGION'. Use PHI, KEN, MEX, PRT or full codes like PHI_CagayandeOroCity."
+    echo "Error: No region matches '$REGION'. Use PHI, KEN, MEX, IDN, LKA, COL, ECU, ZAF or full codes like PHI_CagayandeOroCity."
     exit 1
   fi
   REGION_COUNT=$(echo "$REGIONS" | wc -w | tr -d ' ')
@@ -185,7 +206,35 @@ echo "=========================================="
 [[ -n "$REGION" ]] && echo "Region: $REGION (outputs in $OUT_ROOT/)" && echo ""
 [[ -n "$REF_HOUR" ]] && echo "Ref hour: $REF_HOUR (fb_baseline_median_h$(printf '%02d' "$REF_HOUR").gpkg)" && echo ""
 [[ -n "$POVERTY_SOURCE" ]] && echo "Poverty source: $POVERTY_SOURCE" && echo ""
+[[ -n "$CLIP_SOURCE" ]] && echo "Clip source: $CLIP_SOURCE" && echo ""
 [[ -n "$START_FROM" ]] && echo "Starting from step: $START_FROM" && echo ""
+
+# 0. Meta baseline — build from the PDC zip if the GPKG is not there yet
+if [[ -n "$REGION" ]] && _run_step "01"; then
+  if [[ -n "$REF_HOUR" ]]; then
+    META_GPKG="$PROJECT_ROOT/outputs/$REGION/fb_baseline_median_h$(printf '%02d' "$REF_HOUR").gpkg"
+  else
+    META_GPKG=$(python3 -c "
+import json
+from pathlib import Path
+root = Path(r'$PROJECT_ROOT')
+cfg = json.load(open(root / 'config' / 'regions.json'))
+meta = cfg['$REGION']['meta']
+p = Path(meta)
+print(p if p.is_absolute() else root / p)
+")
+  fi
+  if [[ ! -f "$META_GPKG" ]]; then
+    echo ""
+    echo "[0/15] Meta baseline missing — building from PDC zip..."
+    BUILD_ARGS=(--region "$REGION" -o "$META_GPKG")
+    [[ -n "$REF_HOUR" ]] && BUILD_ARGS+=(--ref-hour "$REF_HOUR")
+    python "$PROJECT_ROOT/data_prep/build_fb_baseline_median.py" "${BUILD_ARGS[@]}"
+  else
+    echo ""
+    echo "[0/15] Meta baseline present: $META_GPKG"
+  fi
+fi
 
 # 1. Harmonise
 if _run_step "01"; then
@@ -195,10 +244,14 @@ if _run_step "01"; then
     HARMONISE_ARGS=(--region "$REGION")
     [[ -n "$REF_HOUR" ]] && HARMONISE_ARGS+=(--ref-hour "$REF_HOUR")
     [[ -n "$POVERTY_SOURCE" ]] && HARMONISE_ARGS+=(--poverty-source "$POVERTY_SOURCE")
+    [[ -n "$CLIP_SOURCE" ]] && HARMONISE_ARGS+=(--clip-source "$CLIP_SOURCE")
+    [[ "$CLIP_REFRESH" == true ]] && HARMONISE_ARGS+=(--clip-refresh)
     python "$SCRIPTS/01_harmonise_datasets.py" "${HARMONISE_ARGS[@]}"
   else
     HARMONISE_ARGS=()
     [[ -n "$POVERTY_SOURCE" ]] && HARMONISE_ARGS+=(--poverty-source "$POVERTY_SOURCE")
+    [[ -n "$CLIP_SOURCE" ]] && HARMONISE_ARGS+=(--clip-source "$CLIP_SOURCE")
+    [[ "$CLIP_REFRESH" == true ]] && HARMONISE_ARGS+=(--clip-refresh)
     python "$SCRIPTS/01_harmonise_datasets.py" "${HARMONISE_ARGS[@]}"
   fi
 else

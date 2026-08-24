@@ -213,6 +213,12 @@ outputs/
 data/povmap-grdi-v1-10.tif
 data/dataverse_files.zip
 
+# WorldPop rasters (place under data/worldpop/; do not commit)
+data/worldpop/*.tif
+
+# Downloaded OSM / geoBoundaries clip cache
+data/boundaries/cache/
+
 # macOS Finder metadata
 .DS_Store
 ._*

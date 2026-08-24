@@ -3,7 +3,7 @@
 Build fb_baseline_median_XXX.gpkg from Meta PDC (Population During Crisis) data.
 
 Accepts either:
-  - Raw PDC directory: preprocesses CSVs in memory, then builds baseline
+  - Raw PDC .zip or directory: reads CSVs in memory (no unzip required)
   - Preprocessed CSV: builds baseline directly
 
 Data source: Meta Data for Good
@@ -11,7 +11,7 @@ Data source: Meta Data for Good
   - Movement Maps: https://dataforgood.facebook.com/dfg/tools/movement-maps
 
 Methodology:
-  1. Load PDC data (from raw dir or CSV)
+  1. Load PDC data (from .zip, directory, or CSV)
   2. Baseline = 7-day shift or Meta's n_baseline
   3. Filter to event week (auto-detected) and reference hour (per-region via pdc_ref_hour in config)
   4. Median baseline per quadkey → GeoPackage
@@ -20,7 +20,7 @@ Usage:
   python data_prep/build_fb_baseline_median.py --region PHI_CagayandeOroCity
   python data_prep/build_fb_baseline_median.py --all
   python data_prep/build_fb_baseline_median.py --all --ref-hour 8
-  python data_prep/build_fb_baseline_median.py -i /path/to/raw/PDC/folder -o outputs/PHI/fb_baseline_median_h08.gpkg
+  python data_prep/build_fb_baseline_median.py -i /path/to/event.zip -o outputs/PHI/fb_baseline_median_h08.gpkg
 
 Output: outputs/{REGION}/fb_baseline_median_h{00|08|16}.gpkg (folder + filename indicate hour).
 
@@ -30,6 +30,7 @@ Default ref_hour: 0 (midnight) for all regions. Override with --ref-hour 8 or 16
 
 import argparse
 import sys
+import zipfile
 from pathlib import Path
 
 import pandas as pd
@@ -52,27 +53,60 @@ def quadkey_to_geometry(quadkey: str):
     return box(bbox.west, bbox.south, bbox.east, bbox.north)
 
 
-def preprocess_raw_pdc(input_dir: Path) -> pd.DataFrame:
-    """Load and preprocess raw PDC CSVs from a directory. Returns standardised DataFrame."""
-    csv_files = sorted(input_dir.glob("*.csv"))
-    if not csv_files:
-        raise FileNotFoundError(f"No CSV files found in {input_dir}")
-    print(f"Preprocessing {len(csv_files)} raw PDC files from {input_dir}...")
+def _is_pdc_csv_name(name: str) -> bool:
+    """Skip macOS junk and non-CSV members inside zips or folders."""
+    p = Path(name)
+    if p.name.startswith("._") or "__MACOSX" in name.replace("\\", "/"):
+        return False
+    return p.suffix.lower() == ".csv"
+
+
+def _standardise_pdc_frame(df: pd.DataFrame) -> pd.DataFrame | None:
+    df.columns = df.columns.str.strip()
+    required = ["quadkey", "date_time", "n_crisis"]
+    if any(c not in df.columns for c in required):
+        return None
+    cols = list(required)
+    if "n_baseline" in df.columns:
+        cols.append("n_baseline")
+    return df[cols].copy()
+
+
+def preprocess_raw_pdc(input_path: Path) -> pd.DataFrame:
+    """Load raw PDC CSVs from a directory or a .zip (no unzip required)."""
     dfs = []
-    for f in csv_files:
-        try:
-            df = pd.read_csv(f, dtype={"quadkey": str})
-        except Exception as e:
-            print(f"  Warning: Could not read {f.name}: {e}")
-            continue
-        df.columns = df.columns.str.strip()
-        required = ["quadkey", "date_time", "n_crisis"]
-        if any(c not in df.columns for c in required):
-            continue
-        cols = ["quadkey", "date_time", "n_crisis"]
-        if "n_baseline" in df.columns:
-            cols.append("n_baseline")
-        dfs.append(df[cols].copy())
+    if input_path.is_dir():
+        csv_files = sorted(p for p in input_path.rglob("*.csv") if _is_pdc_csv_name(str(p)))
+        if not csv_files:
+            raise FileNotFoundError(f"No CSV files found in {input_path}")
+        print(f"Preprocessing {len(csv_files)} raw PDC files from {input_path}...")
+        for f in csv_files:
+            try:
+                df = pd.read_csv(f, dtype={"quadkey": str})
+            except Exception as e:
+                print(f"  Warning: Could not read {f.name}: {e}")
+                continue
+            std = _standardise_pdc_frame(df)
+            if std is not None:
+                dfs.append(std)
+    elif input_path.suffix.lower() == ".zip":
+        with zipfile.ZipFile(input_path) as z:
+            names = sorted(n for n in z.namelist() if _is_pdc_csv_name(n))
+            if not names:
+                raise FileNotFoundError(f"No CSV files found in {input_path}")
+            print(f"Preprocessing {len(names)} raw PDC files from zip {input_path.name}...")
+            for name in names:
+                try:
+                    with z.open(name) as f:
+                        df = pd.read_csv(f, dtype={"quadkey": str})
+                except Exception as e:
+                    print(f"  Warning: Could not read {name}: {e}")
+                    continue
+                std = _standardise_pdc_frame(df)
+                if std is not None:
+                    dfs.append(std)
+    else:
+        raise ValueError(f"Expected a directory or .zip of PDC CSVs, got {input_path}")
     if not dfs:
         raise ValueError("No valid data loaded from any CSV file")
     combined = pd.concat(dfs, ignore_index=True)
@@ -105,13 +139,13 @@ def parse_args():
         "-i", "--input",
         type=Path,
         default=None,
-        help="PDC CSV file or directory of raw PDC CSVs (preprocesses in memory if dir)",
+        help="PDC CSV, .zip, or directory of raw PDC CSVs (CSVs inside a zip are read without unzipping)",
     )
     p.add_argument(
         "--save-csv",
         type=Path,
         default=None,
-        help="Save preprocessed CSV when using raw dir (optional)",
+        help="Save preprocessed CSV when using a raw zip or directory (optional)",
     )
     p.add_argument(
         "-o", "--output",
@@ -172,8 +206,8 @@ def build_baseline_for_region(region: str, ref_hour: int, args) -> None:
     if not input_path.exists():
         raise FileNotFoundError(f"Input not found: {input_path}")
 
-    # 1. Load PDC data (from raw dir or CSV)
-    if input_path.is_dir():
+    # 1. Load PDC data (from zip, directory, or CSV)
+    if input_path.is_dir() or input_path.suffix.lower() == ".zip":
         df = preprocess_raw_pdc(input_path)
         if args.save_csv:
             args.save_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -302,7 +336,7 @@ def main():
 
         regions = region_config.expand_region_to_list(args.region)
         if not regions:
-            raise ValueError(f"No region matches '{args.region}'. Use PHI, KEN, MEX, PRT or full codes.")
+            raise ValueError(f"No region matches '{args.region}'. Use PHI, KEN, MEX, IDN, LKA, COL, ECU, ZAF or full codes.")
         if len(regions) > 1:
             print(f"Building baseline for {args.region} ({len(regions)} regions): {', '.join(regions)}")
         for region in regions:
@@ -330,7 +364,7 @@ def main():
     if not input_path.exists():
         raise FileNotFoundError(f"Input not found: {input_path}")
 
-    if input_path.is_dir():
+    if input_path.is_dir() or input_path.suffix.lower() == ".zip":
         df = preprocess_raw_pdc(input_path)
         if args.save_csv:
             args.save_csv.parent.mkdir(parents=True, exist_ok=True)

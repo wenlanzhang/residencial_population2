@@ -14,6 +14,8 @@ Usage:
   python pipeline/01_harmonise_datasets.py --worldpop ... --meta ... --poverty /path/to/poverty.tif
   python pipeline/01_harmonise_datasets.py --filter-by meta --filter-min 50   # keep quadkeys with meta_baseline > 50
   python pipeline/01_harmonise_datasets.py --filter-by worldpop --filter-min 50   # keep quadkeys with worldpop_count > 50
+  python pipeline/01_harmonise_datasets.py --region KEN_Nairobi --clip-source osm
+  python pipeline/01_harmonise_datasets.py --region KEN_Nairobi --clip-source geob
   python pipeline/01_harmonise_datasets.py --filter-by both --filter-min 50   # keep quadkeys where BOTH meta and worldpop >= 50
 """
 
@@ -25,8 +27,10 @@ import multiprocessing
 import sys
 from pathlib import Path
 
-# Allow importing region_config from pipeline/
+# Allow importing region_config / clip_utils from pipeline/
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import clip_utils
 
 import pandas as pd
 import geopandas as gpd
@@ -41,7 +45,7 @@ except ImportError:
 # Default paths (used when --region not set)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASE = PROJECT_ROOT / "data"  # WorldPop, Poverty rasters; put files here or override with CLI
-DEFAULT_WORLDPOP = Path("/Users/wenlanzhang/Downloads/PhD_UCL/Data/Residential_population/worldpop/phl_pop_2026_CN_100m_R2025A_v1.tif")
+DEFAULT_WORLDPOP = PROJECT_ROOT / "data" / "worldpop" / "phl_pop_2026_CN_100m_R2025A_v1.tif"
 DEFAULT_META = PROJECT_ROOT / "outputs" / "fb_baseline_median_PHI.gpkg"  # from build_fb_baseline_median.py
 DEFAULT_POVERTY = PROJECT_ROOT / "data" / "povmap-grdi-v1-10.tif"
 
@@ -99,7 +103,25 @@ def parse_args():
     p.add_argument("--workers", type=int, default=1,
                    help="Parallel workers for zonal_stats (default: 1). Use 4+ for large grids.")
     p.add_argument("--clip-shape", type=Path, default=None,
-                   help="Clip to study area: path to .shp, .gpkg, or .geojson. Overrides config clip_shape.")
+                   help="Clip to study area: path to .shp, .gpkg, or .geojson. Used when --clip-source local.")
+    p.add_argument(
+        "--clip-source",
+        type=str,
+        default=None,
+        choices=["local", "osm", "geob"],
+        help="City boundary: local (config clip_shape), osm (OSMnx/Nominatim), "
+             "or geob (geoBoundaries). Default: local.",
+    )
+    p.add_argument("--clip-osm-place", type=str, default=None,
+                   help="OSM/Nominatim place query when --clip-source osm (overrides config).")
+    p.add_argument("--clip-geob-iso3", type=str, default=None,
+                   help="geoBoundaries ISO3 code when --clip-source geob (e.g. KEN).")
+    p.add_argument("--clip-geob-adm", type=str, default=None,
+                   help="geoBoundaries ADM level when --clip-source geob (e.g. ADM1, ADM3).")
+    p.add_argument("--clip-geob-name", type=str, default=None,
+                   help="geoBoundaries feature name to keep (e.g. Nairobi).")
+    p.add_argument("--clip-refresh", action="store_true",
+                   help="Re-download OSM/geoBoundaries even if a cache file exists.")
     return p.parse_args()
 
 
@@ -128,11 +150,23 @@ def main():
         else:
             poverty_source = args.poverty_source or cfg.get("poverty_source") or "grdi"
             poverty_path = region_config.resolve_poverty_path(cfg, poverty_source)
-        clip_shape_path = args.clip_shape or cfg.get("clip_shape")
+        if args.clip_shape is not None:
+            cfg["clip_shape"] = args.clip_shape
+        if args.clip_osm_place:
+            cfg["clip_osm_place"] = args.clip_osm_place
+        if args.clip_geob_iso3:
+            cfg["clip_geob_iso3"] = args.clip_geob_iso3
+        if args.clip_geob_adm:
+            cfg["clip_geob_adm"] = args.clip_geob_adm
+        if args.clip_geob_name:
+            cfg["clip_geob_name"] = args.clip_geob_name
+        clip_source = args.clip_source or cfg.get("clip_source") or "local"
+        cfg["clip_source"] = clip_source
         out_dir = region_config.get_output_dir(args.region, "01")
         print(f"Region: {args.region} ({cfg.get('name', args.region)})")
         if not args.no_poverty:
             print(f"Poverty source: {poverty_source} → {poverty_path}")
+        print(f"Clip source: {clip_source}")
     else:
         worldpop = args.worldpop or DEFAULT_WORLDPOP
         meta_path = args.meta or DEFAULT_META
@@ -151,10 +185,19 @@ def main():
                     "--poverty-source rwi requires --poverty PATH or --region (per-city RWI CSV in config)."
                 )
             poverty_path = DEFAULT_POVERTY
-        clip_shape_path = args.clip_shape
+        cfg = {
+            "clip_shape": args.clip_shape,
+            "clip_osm_place": args.clip_osm_place,
+            "clip_geob_iso3": args.clip_geob_iso3,
+            "clip_geob_adm": args.clip_geob_adm,
+            "clip_geob_name": args.clip_geob_name,
+            "clip_source": args.clip_source or "local",
+        }
+        clip_source = cfg["clip_source"]
         out_dir = PROJECT_ROOT / "outputs" / "01"
         if not args.no_poverty:
             print(f"Poverty source: {poverty_source} → {poverty_path}")
+        print(f"Clip source: {clip_source}")
 
     out_gpkg = args.output or (out_dir / "harmonised_meta_worldpop.gpkg")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -183,11 +226,11 @@ def main():
             )
             raise FileNotFoundError(msg)
 
-    # Validate clip_shape if configured
-    if clip_shape_path is not None:
-        clip_p = Path(clip_shape_path)
+    # Validate clip_shape only for local files; OSM/geoBoundaries are fetched later
+    if clip_source == "local" and cfg.get("clip_shape") is not None:
+        clip_p = Path(cfg["clip_shape"])
         if not clip_p.exists():
-            raise FileNotFoundError(f"Clip shape not found: {clip_shape_path}")
+            raise FileNotFoundError(f"Clip shape not found: {cfg['clip_shape']}")
 
     # -------------------------------------------------------------------------
     # 1. Load data
@@ -205,16 +248,29 @@ def main():
         print("  Meta reprojected to EPSG:4326")
 
     # -------------------------------------------------------------------------
-    # 2b. Clip to study area (city/region boundary) if clip_shape configured
+    # 2b. Clip to study area (city/region boundary)
     # -------------------------------------------------------------------------
-    if clip_shape_path is not None:
-        clip_gdf = gpd.read_file(clip_shape_path)
+    clip_gdf = clip_utils.load_clip_boundary(
+        cfg,
+        source=clip_source,
+        region_code=args.region,
+        refresh=args.clip_refresh,
+    )
+    if clip_gdf is not None:
         if clip_gdf.crs != meta.crs:
             clip_gdf = clip_gdf.to_crs(meta.crs)
-        clip_union = clip_gdf.geometry.unary_union
+        clip_union = clip_utils.unary_geom(clip_gdf)
         before = len(meta)
         meta = meta[meta.geometry.intersects(clip_union)].copy()
-        print(f"  Clipped to study area: kept {len(meta)} / {before} quadkeys")
+        print(f"  Clipped to study area ({clip_source}): kept {len(meta)} / {before} quadkeys")
+        clip_save = gpd.GeoDataFrame(
+            {"clip_source": [clip_source]},
+            geometry=[clip_union],
+            crs=clip_gdf.crs,
+        )
+        clip_out = out_dir / "clip_boundary.gpkg"
+        clip_save.to_file(clip_out, driver="GPKG")
+        print(f"  Saved clip polygon: {clip_out}")
 
     # WorldPop is already EPSG:4326; rasterstats will handle CRS alignment
     # when zones are in same CRS as raster

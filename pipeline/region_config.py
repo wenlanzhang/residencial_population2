@@ -13,10 +13,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config" / "regions.json"
 
 # Top-level keys in regions.json that are not region codes
-GLOBAL_KEYS = ("data_root", "poverty_source", "poverty_grdi")
+GLOBAL_KEYS = ("data_root", "poverty_source", "poverty_grdi", "clip_source")
 DEFAULT_POVERTY_SOURCE = "grdi"
 VALID_POVERTY_SOURCES = ("grdi", "rwi")
 DEFAULT_POVERTY_GRDI = PROJECT_ROOT / "data" / "povmap-grdi-v1-10.tif"
+DEFAULT_CLIP_SOURCE = "local"
+VALID_CLIP_SOURCES = ("local", "osm", "geob")
 
 
 def load_regions():
@@ -67,6 +69,24 @@ def resolve_poverty_path(cfg: dict, source: str | None = None) -> Path | None:
     return Path(path) if path else None
 
 
+def get_clip_source(regions: dict | None = None, region_cfg: dict | None = None) -> str:
+    """Clip boundary source: `local` (default), `osm`, or `geob`."""
+    raw = None
+    if region_cfg and region_cfg.get("clip_source"):
+        raw = region_cfg.get("clip_source")
+    elif regions is not None:
+        raw = regions.get("clip_source")
+    elif region_cfg is None:
+        regions = load_regions()
+        raw = regions.get("clip_source")
+    src = str(raw or DEFAULT_CLIP_SOURCE).strip().lower()
+    if src not in VALID_CLIP_SOURCES:
+        raise ValueError(
+            f"Unknown clip_source {src!r}. Use one of: {', '.join(VALID_CLIP_SOURCES)}"
+        )
+    return src
+
+
 def get_region_config(region: str) -> dict:
     """Get config for region (e.g. PHI, KEN, MEX). Resolves paths."""
     regions = load_regions()
@@ -77,15 +97,17 @@ def get_region_config(region: str) -> dict:
         raise ValueError(f"Unknown region: {region}. Available: {list_regions()}")
     cfg = regions[region].copy()
     path_keys = ("worldpop", "meta", "poverty", "clip_shape", "pdc_raw_dir", "pdc_processed_csv")
-    data_root_keys = ("worldpop", "poverty", "pdc_raw_dir")
+    data_root_keys = ("poverty", "pdc_raw_dir")
     for key in path_keys:
         if key in cfg and cfg[key]:
             base = data_root if (data_root and key in data_root_keys) else PROJECT_ROOT
             cfg[key] = resolve_path(cfg[key], base)
 
+    cfg["region_code"] = region
     cfg["poverty_source"] = get_poverty_source(regions)
     grdi = regions.get("poverty_grdi")
     cfg["poverty_grdi"] = resolve_path(grdi, PROJECT_ROOT) if grdi else DEFAULT_POVERTY_GRDI
+    cfg["clip_source"] = get_clip_source(regions, cfg)
     return cfg
 
 
@@ -108,12 +130,20 @@ def list_regions() -> list:
 
 def expand_region_to_list(region_or_prefix: str) -> list:
     """
-    Expand a region code or country prefix to a list of region codes.
-    PHI -> [PHI_CagayandeOroCity, PHI_DavaoCity]; KEN -> [KEN_Nairobi, KEN_Mombasa];
-    MEX -> [MEX]; PHI_CagayandeOroCity -> [PHI_CagayandeOroCity].
+    Expand a region code, country prefix, or comma-separated list to region codes.
+    PHI -> [PHI_CagayandeOroCity, PHI_DavaoCity, ...]; KEN -> [KEN_Nairobi, KEN_Mombasa, ...];
+    MEX -> [MEX]; IDN / LKA / COL / ECU / ZAF -> that event region;
+    IDN,LKA,ZAF -> [IDN, LKA, ZAF];
+    PHI_CagayandeOroCity -> [PHI_CagayandeOroCity].
     """
     keys = list_regions()
-    if region_or_prefix in keys:
-        return [region_or_prefix]
-    matches = [k for k in keys if k.startswith(region_or_prefix)]
-    return matches
+    parts = [p.strip() for p in str(region_or_prefix).split(",") if p.strip()]
+    out = []
+    seen = set()
+    for part in parts:
+        matches = [part] if part in keys else [k for k in keys if k.startswith(part)]
+        for m in matches:
+            if m not in seen:
+                seen.add(m)
+                out.append(m)
+    return out

@@ -57,10 +57,11 @@ load_city_lookup <- function() {
   if (!file.exists(p)) return(character(0))
   regs <- jsonlite::read_json(p, simplifyVector = TRUE)
   nm <- names(regs)
-  nm <- nm[!nm %in% c("data_root", "poverty_source", "poverty_grdi")]
+  nm <- nm[!nm %in% c("data_root", "poverty_source", "poverty_grdi", "clip_source")]
   out <- stats::setNames(nm, nm)
   for (code in nm) {
     cfg <- regs[[code]]
+    if (!is.list(cfg)) next
     lab <- cfg[["city_label"]]
     if (is.null(lab) || !nzchar(as.character(lab)[1])) lab <- cfg[["name"]]
     if (!is.null(lab) && nzchar(as.character(lab)[1])) out[[code]] <- as.character(lab)[1]
@@ -81,7 +82,8 @@ discover_cross_city <- function(outputs_root) {
   summ_rows <- list()
   for (d in subs) {
     code <- basename(d)
-    if (code %in% c("cross-city", "01", "02", ".")) next
+    if (code %in% c("cross-city", "cross-city_local", "01", "02", ".", "0", "footprints", "KEN")) next
+    if (grepl("_local$", code)) next
     imp <- file.path(d, "04_impact")
     tb <- file.path(imp, "Table4b_allocation_sensitivity.csv")
     tm <- file.path(imp, "Table4_impact_population_summary.csv")

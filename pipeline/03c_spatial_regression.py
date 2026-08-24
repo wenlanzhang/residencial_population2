@@ -102,7 +102,7 @@ def main():
     # --------------------------------------------------
     # 3️⃣ Spatial weights — KNN (k=6) for numerical stability, no islands
     # --------------------------------------------------
-    gdf_proj = gdf.to_crs(args.project_crs)
+    gdf_proj = gdf.to_crs(poverty_utils.utm_crs_for(gdf))
     # Drop invalid geometries (empty centroids cause KNN.from_dataframe to fail)
     valid_geom = poverty_utils.has_valid_centroids(gdf_proj)
     if not valid_geom.all():

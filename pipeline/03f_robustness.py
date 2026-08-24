@@ -45,7 +45,7 @@ def _scalar(x):
 def _build_knn_weights(gdf, project_crs, k=6):
     """Build KNN weights (k=6) for numerical stability, no islands. Returns (gdf, w)."""
     from libpysal.weights import KNN
-    gdf_proj = gdf.to_crs(project_crs)
+    gdf_proj = gdf.to_crs(poverty_utils.utm_crs_for(gdf))
     # Drop invalid geometries (empty centroids cause KNN to fail)
     valid_geom = poverty_utils.has_valid_centroids(gdf_proj)
     if not valid_geom.all():

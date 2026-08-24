@@ -71,7 +71,7 @@ while (i <= length(args)) {
       regions <- load_regions()
       valid <- region_codes(regions)
       if (length(valid) > 0 && !region_arg %in% valid) {
-        stop("--region must be a valid region from config (e.g. PHI_CagayandeOroCity, PHI_DavaoCity, KEN_Nairobi, KEN_Mombasa, MEX, PRT)")
+        stop("--region must be a valid region from config (e.g. PHI_CagayandeOroCity, KEN_Nairobi, MEX, IDN, LKA, COL, ECU, ZAF)")
       }
     }
     i <- i + 2

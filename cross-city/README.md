@@ -17,7 +17,7 @@ Horizontal run across multiple regions: steps 01, 02, 03c, then summary tables.
 - **N cells (total)** / **Total WorldPop** / **Total Meta (FB)** / **Total area (km²)**: Step **01** harmonised grid (all quadkeys, **including zeros**)
 - **N cells (valid)** / **Valid WorldPop** / **Valid Meta (FB)** / **Valid area (km²)**: Step **02** analysis grid (both shares > 0; zeros excluded)
 - **Valid WorldPop (% of total)** / **Valid Meta (% of total)**: Valid-cell population ÷ harmonised total (step 01) × 100 for each source
-- **Total area (% of city)**: Total harmonised grid area ÷ official city boundary (`clip_shape`) × 100
+- **Total area (% of city)**: Total harmonised grid area ÷ city boundary × 100 (the polygon used in step 01: local `clip_shape`, OSM, or geoBoundaries)
 - **Valid area (% of harmonised grid)**: Valid area ÷ total harmonised area × 100
 - **Valid area (% of city)**: Valid area ÷ city boundary × 100
 - **Spearman ρ, Pearson r, …**: Computed on the **valid** grid only (step 02)
@@ -65,6 +65,16 @@ python cross-city/run_cross_city_table.py --poverty-source rwi
 # Custom output directory
 python cross-city/run_cross_city_table.py -o outputs/cross-city/
 ```
+
+## Figures (Python)
+
+SEM τ forest for every study city, grouped by country (95% CIs from `Table_tau_comparison.csv`):
+
+```bash
+python cross-city/figure_sem_forest_all_cities.py
+```
+
+Writes `outputs/cross-city/Figure_sem_forest_all_cities.png` and `Table_sem_tau_all_cities.csv`. Event-level extracts and `*_local` runs are excluded.
 
 ## Figures (R)
 

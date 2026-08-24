@@ -7,6 +7,7 @@ has_valid_centroids() — vectorized geometry validation (shared by 02, 03c, 03f
 """
 
 from pathlib import Path
+import math
 
 import geopandas as gpd
 import numpy as np
@@ -17,6 +18,17 @@ def has_valid_centroids(gdf):
     """Vectorized: return boolean mask of rows with valid, non-empty centroids."""
     centroids = gdf.geometry.centroid
     return ~centroids.is_empty
+
+
+def utm_crs_for(gdf) -> str:
+    """UTM EPSG from the layer centroid (not a Kenya-only default)."""
+    gdf_wgs = gdf.to_crs("EPSG:4326") if str(gdf.crs) != "EPSG:4326" else gdf
+    b = gdf_wgs.total_bounds
+    clon = float((b[0] + b[2]) / 2)
+    clat = float((b[1] + b[3]) / 2)
+    zone = int(math.floor((clon + 180.0) / 6.0) + 1)
+    zone = max(1, min(zone, 60))
+    return f"EPSG:{(32600 + zone) if clat >= 0 else (32700 + zone)}"
 
 
 def load_and_prepare_gdf(input_path, project_crs: str, residual_col: str = "allocation_residual"):
@@ -43,14 +55,8 @@ def load_and_prepare_gdf(input_path, project_crs: str, residual_col: str = "allo
         valid = valid & (gdf["poverty_n_pixels"] > 0)
     gdf_analysis = gdf[valid].copy()
 
-    # Use appropriate UTM for study area (Philippines vs Kenya)
-    b = gdf_analysis.total_bounds
-    centroid_lon = (b[0] + b[2]) / 2
-    centroid_lat = (b[1] + b[3]) / 2
-    if 118 <= centroid_lon <= 127 and 5 <= centroid_lat <= 20:
-        project_crs = "EPSG:32651"  # UTM 51N for Philippines
-    elif project_crs == "EPSG:32737":
-        pass  # Keep UTM 37S for Kenya/Nairobi
+    # UTM for this city's centroid (Kenya 37S is wrong for PH / MX)
+    project_crs = utm_crs_for(gdf_analysis)
 
     # Distance and population density for regression controls
     gdf_proj = gdf_analysis.to_crs(project_crs)

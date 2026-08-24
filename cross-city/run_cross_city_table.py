@@ -46,6 +46,7 @@ def run_step_01(
     region: str,
     ref_hour: Optional[int] = None,
     poverty_source: Optional[str] = None,
+    clip_source: Optional[str] = None,
 ) -> bool:
     """Run harmonisation for region. Returns True on success."""
     cmd = [sys.executable, str(SCRIPTS / "01_harmonise_datasets.py"), "--region", region]
@@ -53,6 +54,8 @@ def run_step_01(
         cmd.extend(["--ref-hour", str(ref_hour)])
     if poverty_source:
         cmd.extend(["--poverty-source", poverty_source])
+    if clip_source:
+        cmd.extend(["--clip-source", clip_source])
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode == 0
 
@@ -117,9 +120,9 @@ def extract_metrics_from_region(region: str) -> dict | None:
         )
     )
 
-    # Harmonised grid area as % of official city boundary (clip_shape), when configured.
+    # Harmonised grid area as % of the city boundary used in step 01.
     gdf_for_crs = gdf_all if gpkg_01_path.exists() else gdf_analysis
-    city_boundary_km2 = _city_boundary_area_km2(cfg.get("clip_shape"), gdf_for_crs)
+    city_boundary_km2 = _city_boundary_area_km2(cfg, gdf_for_crs, region)
     metrics.update(
         _grid_area_pct_of_city(
             metrics.get("Total_Area_km2"),
@@ -303,24 +306,36 @@ def _polygon_area_km2(gdf) -> float:
     return float((gdf_proj.geometry.area / 1e6).sum())
 
 
-def _city_boundary_area_km2(clip_shape, reference_gdf) -> float | None:
-    """Area of city boundary polygon(s) from config clip_shape, in km² (same UTM as grid)."""
-    if not clip_shape:
-        return None
-    clip_path = Path(clip_shape)
-    if not clip_path.is_absolute():
-        clip_path = PROJECT_ROOT / clip_path
-    if not clip_path.exists():
-        return None
+def _city_boundary_area_km2(cfg, reference_gdf, region: str | None = None) -> float | None:
+    """Area of the city clip polygon in km² (same UTM as grid).
 
+    Prefers the polygon saved by step 01 (`outputs/{REGION}/01/clip_boundary.gpkg`)
+    so OSM/geoBoundaries runs match the boundary that was actually used.
+    """
     import geopandas as gpd
+    import region_config
+    from clip_utils import load_clip_boundary, unary_geom
 
-    boundary = gpd.read_file(clip_path)
+    code = region or cfg.get("region_code")
+    boundary = None
+    if code:
+        saved = region_config.get_output_dir(code, "01") / "clip_boundary.gpkg"
+        if saved.exists():
+            boundary = gpd.read_file(saved)
+    if boundary is None:
+        try:
+            boundary = load_clip_boundary(cfg, region_code=code)
+        except Exception as e:
+            print(f"  City boundary skipped for {code}: {e}")
+            return None
+    if boundary is None:
+        return None
+
     ref_wgs = reference_gdf.to_crs("EPSG:4326") if str(reference_gdf.crs) != "EPSG:4326" else reference_gdf
     proj_crs = _pick_projected_crs(ref_wgs)
     if boundary.crs != proj_crs:
         boundary = boundary.to_crs(proj_crs)
-    return float(boundary.geometry.union_all().area / 1e6)
+    return float(unary_geom(boundary).area / 1e6)
 
 
 def _grid_area_pct_of_city(
@@ -444,6 +459,13 @@ def main():
         choices=["grdi", "rwi"],
         help="Poverty layer for step 01: grdi (default GeoTIFF) or rwi (Meta RWI CSV).",
     )
+    p.add_argument(
+        "--clip-source",
+        type=str,
+        default=None,
+        choices=["local", "osm", "geob"],
+        help="City boundary for step 01: local (default), osm, or geob.",
+    )
     args = p.parse_args()
 
     regions = get_regions(args.regions)
@@ -456,7 +478,12 @@ def main():
     if not args.aggregate_only:
         for region in regions:
             print(f"\n--- Running 01 + 02 + 03c for {region} ---")
-            if not run_step_01(region, ref_hour=args.ref_hour, poverty_source=args.poverty_source):
+            if not run_step_01(
+                region,
+                ref_hour=args.ref_hour,
+                poverty_source=args.poverty_source,
+                clip_source=args.clip_source,
+            ):
                 print(f"  WARNING: Step 01 failed for {region}")
             if not run_step_02(region):
                 print(f"  WARNING: Step 02 failed for {region}")

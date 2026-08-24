@@ -27,6 +27,7 @@ Usage:
 """
 
 import argparse
+import math
 from pathlib import Path
 
 import numpy as np
@@ -53,6 +54,19 @@ OUT_DIR = PROJECT_ROOT / "outputs" / "02"
 
 # Philippines zoom: center 7.0647° N, 125.6088° E (Mindanao), buffer ±0.6°
 PHILIPPINES_BBOX = (125.0088, 6.4647, 126.2088, 7.6647)  # xmin, ymin, xmax, ymax
+
+
+def _projected_crs(gdf) -> str:
+    """UTM CRS from data centroid (EPSG:32737 is Kenya-only and breaks PH/MX areas)."""
+    gdf_wgs = gdf.to_crs("EPSG:4326") if str(gdf.crs) != "EPSG:4326" else gdf
+    b = gdf_wgs.total_bounds
+    clon = float((b[0] + b[2]) / 2)
+    clat = float((b[1] + b[3]) / 2)
+    zone = int(math.floor((clon + 180.0) / 6.0) + 1)
+    zone = max(1, min(zone, 60))
+    epsg = (32600 + zone) if clat >= 0 else (32700 + zone)
+    return f"EPSG:{epsg}"
+
 
 
 def _get_region_bbox(region_code: str):
@@ -173,7 +187,7 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
     meta_v = meta_raw[valid]
     gdf_valid = gdf[valid].copy()
     # Project once and reuse (avoids repeated CRS transforms)
-    gdf_proj = gdf_valid.to_crs("EPSG:32737")
+    gdf_proj = gdf_valid.to_crs(_projected_crs(gdf_valid))
 
     print("=" * 60)
     # Region for map zoom (calculations use full data)
@@ -238,7 +252,11 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
 
     # Population density (per km²) — need area (reuse gdf_proj)
     area_km2 = gdf_proj.geometry.area.values / 1e6
-    area_km2 = np.maximum(area_km2, 1e-6)  # avoid div by zero
+    area_km2 = np.nan_to_num(area_km2, nan=np.nan, posinf=np.nan, neginf=np.nan)
+    med_area = np.nanmedian(area_km2)
+    if not np.isfinite(med_area) or med_area <= 0:
+        med_area = 1e-6
+    area_km2 = np.where(np.isfinite(area_km2) & (area_km2 > 0), area_km2, med_area)
     density_wp = wp_v / area_km2
     density_meta = meta_v / area_km2
 
@@ -336,6 +354,8 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
         x_s = x[order]
         w_s = w[order]
         cum = np.cumsum(w_s)
+        if len(cum) == 0:
+            return x_s, cum
         return x_s, cum / (cum[-1] + 1e-10)
 
     def _percentile_value(x_sorted, y_sorted, p):
@@ -891,7 +911,7 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
 
     # Sensitivity table: area and pop shares by class (for both versions)
     # Use wp_s, meta_s (aligned with filtered gdf_valid) — wp_v/meta_v may have different length after spatial filter
-    gdf_proj_typ = gdf_valid.to_crs("EPSG:32737")
+    gdf_proj_typ = gdf_valid.to_crs(_projected_crs(gdf_valid))
     area_cells = gdf_proj_typ.geometry.area.values / 1e6  # km²
     total_area = area_cells.sum()
     total_wp_s = wp_s.sum()
@@ -1027,8 +1047,9 @@ def main():
         try:
             import region_config
             cfg = region_config.get_region_config(args.region)
-            # When clip_shape is set: use data extent for maps (data is already clipped)
-            args.region_bbox = None if cfg.get("clip_shape") else cfg.get("map_bbox")
+            # When a city clip is applied in 01: use data extent for maps
+            import clip_utils
+            args.region_bbox = None if clip_utils.has_clip_boundary(cfg) else cfg.get("map_bbox")
             args.region_label = cfg.get("map_bbox_label") or cfg.get("name") or args.region
             if args.input is None:
                 args.input = region_config.get_output_dir(args.region, "01") / "harmonised_meta_worldpop.gpkg"
