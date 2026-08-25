@@ -206,18 +206,25 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Pipeline outputs — regenerate with ./run (PNGs, GPKGs, CSVs; large / not for version control)
+# Pipeline CSVs — regenerate with ./run
 outputs/
 
-# GRDI raster (place at data/povmap-grdi-v1-10.tif; do not commit)
-data/povmap-grdi-v1-10.tif
-data/dataverse_files.zip
+# Pipeline figures — regenerate with ./run
+figure/
 
-# WorldPop rasters (place under data/worldpop/; do not commit)
-data/worldpop/*.tif
+# Harmonised GPKGs (intermediate; regenerate with ./run)
+data/processed/
+data/baselines/
+
+# GRDI raster (place at data/raw/povmap-grdi-v1-10.tif; do not commit)
+data/raw/povmap-grdi-v1-10.tif
+data/raw/dataverse_files.zip
+
+# WorldPop rasters (place under data/raw/worldpop/; do not commit)
+data/raw/worldpop/*.tif
 
 # Downloaded OSM / geoBoundaries clip cache
-data/boundaries/cache/
+data/raw/boundaries/cache/
 
 # macOS Finder metadata
 .DS_Store

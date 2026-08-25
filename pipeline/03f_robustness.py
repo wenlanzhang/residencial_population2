@@ -32,6 +32,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import poverty_utils
+import region_config
 
 DEFAULT_INPUT = PROJECT_ROOT / "outputs" / "02" / "harmonised_with_residual.gpkg"
 OUT_SUBDIR = "03f_robustness"
@@ -76,6 +77,7 @@ def parse_args():
     p = argparse.ArgumentParser(description="03f — Sensitivity analyses for spatial error specification")
     p.add_argument("-i", "--input", type=Path, default=DEFAULT_INPUT)
     p.add_argument("-o", "--output-dir", type=Path, default=PROJECT_ROOT / "outputs")
+    p.add_argument("--region", type=str, default=None)
     p.add_argument("--project-crs", type=str, default="EPSG:32737")
     return p.parse_args()
 
@@ -85,8 +87,7 @@ def main():
     if not args.input.exists():
         raise FileNotFoundError(f"Missing input: {args.input}. Run step 02 first.")
 
-    out_dir = args.output_dir / OUT_SUBDIR
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = region_config.resolve_step_paths(args.region, OUT_SUBDIR, args.output_dir, args.input)
 
     gdf_full = poverty_utils.load_and_prepare_gdf(
         args.input, args.project_crs, residual_col="allocation_residual"

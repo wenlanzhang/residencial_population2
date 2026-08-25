@@ -3,7 +3,7 @@
 #
 # Fig 1 — Dumbbell: WorldPop vs Meta share of allocation to high-poverty cells (≥ p75), Table4b full_grid.
 # Fig 2 — Bars: redistribution magnitude M (Table4 summary). Panel text kept minimal; define Σ formula in manuscript.
-# Combined Figure 6: Figure6_Operation_Impact.png (Fig 1 | Fig 2; patchwork or cowplot).
+# Combined 04_operation_impact.png (dumbbell | bar; patchwork or cowplot).
 #
 # Single region (after run_all per city):
 #   Rscript pipeline/04_plots.R -i outputs/KEN_Nairobi/04_impact
@@ -12,7 +12,7 @@
 #   Rscript pipeline/04_plots.R --cross-city -i outputs -o outputs/cross-city
 #
 # Requires: ggplot2, dplyr, tidyr, scales, jsonlite
-# Optional (combined Figure 6): patchwork (preferred) or cowplot
+# Optional (combined 04_operation_impact): patchwork (preferred) or cowplot
 
 suppressPackageStartupMessages({
   library(ggplot2)
@@ -51,6 +51,7 @@ project_root <- if (length(ff)) {
 } else {
   normalizePath(".", winslash = "/", mustWork = TRUE)
 }
+source(file.path(project_root, "pipeline", "region_config.R"), local = TRUE)
 
 load_city_lookup <- function() {
   p <- file.path(project_root, "config", "regions.json")
@@ -152,7 +153,7 @@ if (cross_city) {
   out_dir <- if (!is.null(out_arg)) {
     normalizePath(out_arg, winslash = "/", mustWork = FALSE)
   } else {
-    file.path(project_root, "outputs", "cross-city")
+    file.path(project_root, "figure", "cross-city")
   }
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
   suffix <- "_cross_city"
@@ -162,7 +163,14 @@ if (cross_city) {
   }
   impact_dir <- normalizePath(in_arg, winslash = "/", mustWork = TRUE)
   dat <- read_single_region(impact_dir)
-  out_dir <- impact_dir
+  if (!is.null(out_arg)) {
+    out_dir <- out_arg
+  } else if (!is.null(region_cli) && nzchar(region_cli)) {
+    out_dir <- figure_dir(region_cli, "04_impact")
+  } else {
+    inf <- region_from_artifact_path(impact_dir)
+    out_dir <- if (!is.null(inf)) figure_dir(inf, "04_impact") else impact_dir
+  }
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
   suffix <- ""
 }
@@ -237,7 +245,7 @@ if (nrow(alloc) == 0) {
 
   # Tighter height without subtitle/caption under panel
   h1_plot <- max(3.2, 0.42 * nrow(seg) + 1.1)
-  f1 <- file.path(out_dir, paste0("04_fig1_high_poverty_allocation_dumbbell", suffix, ".png"))
+  f1 <- file.path(out_dir, paste0("04_high_poverty_allocation_dumbbell", suffix, ".png"))
   ggsave(f1, p1, width = 7.2, height = h1_plot, dpi = 300, bg = "white")
   message("Saved: ", f1)
 }
@@ -276,7 +284,7 @@ if (nrow(summ) == 0 || !"share_mass_redistribution_M" %in% names(summ)) {
     theme_nature()
 
   h2_plot <- max(3.0, 0.38 * nrow(summ) + 1.0)
-  f2 <- file.path(out_dir, paste0("04_fig2_redistribution_M_bar", suffix, ".png"))
+  f2 <- file.path(out_dir, paste0("04_redistribution_M_bar", suffix, ".png"))
   ggsave(f2, p2, width = 6.8, height = h2_plot, dpi = 300, bg = "white")
   message("Saved: ", f2)
   }
@@ -284,7 +292,7 @@ if (nrow(summ) == 0 || !"share_mass_redistribution_M" %in% names(summ)) {
 
 # --- Combined Figure 6 (operational impact): dumbbell + M bar ---
 if (!is.null(p1) && !is.null(p2)) {
-  f6 <- file.path(out_dir, paste0("Figure6_Operation_Impact", suffix, ".png"))
+  f6 <- file.path(out_dir, paste0("04_operation_impact", suffix, ".png"))
   # Side-by-side: total width ≈ sum of single-panel widths; height ≈ taller panel
   w_tot <- 7.2 + 6.8 + 1.0
   h_tot <- max(h1_plot, h2_plot) + 1.2
@@ -325,13 +333,13 @@ if (!is.null(p1) && !is.null(p2)) {
     message("Saved: ", f6)
   } else {
     warning(
-      "Figure6_Operation_Impact skipped: install patchwork or cowplot ",
+      "04_operation_impact skipped: install patchwork or cowplot ",
       "(e.g. install.packages(c(\"patchwork\",\"cowplot\")))."
     )
   }
 } else {
   message(
-    "Figure6_Operation_Impact skipped: need both high-poverty dumbbell data (Table4b full_grid) ",
+    "04_operation_impact skipped: need both high-poverty dumbbell data (Table4b full_grid) ",
     "and M summary (Table4_impact_population_summary)."
   )
 }

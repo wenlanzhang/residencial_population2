@@ -7,7 +7,7 @@ Sources
   osm    OSMnx geocode_to_gdf (Nominatim fallback if osmnx is not installed)
   geob   geoBoundaries gbOpen API, filtered by admin name
 
-Online results are cached under data/boundaries/cache/ so later runs are offline.
+Online results are cached under data/raw/boundaries/cache/ so later runs are offline.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from pathlib import Path
 import geopandas as gpd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CACHE_DIR = PROJECT_ROOT / "data" / "boundaries" / "cache"
+CACHE_DIR = PROJECT_ROOT / "data" / "raw" / "boundaries" / "cache"
 
 VALID_CLIP_SOURCES = ("local", "osm", "geob")
 DEFAULT_CLIP_SOURCE = "local"

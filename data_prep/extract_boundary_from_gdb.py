@@ -13,14 +13,14 @@ Workflow (GDB):
 
 Workflow (GeoJSON — single layer, no -l needed):
   python data_prep/extract_boundary_from_gdb.py -i mex_admin2.geojson --inspect
-  python data_prep/extract_boundary_from_gdb.py -i mex_admin2.geojson -n "México" --name-col adm1_name -o data/boundaries/Mex/Mexico_state.gpkg
+  python data_prep/extract_boundary_from_gdb.py -i mex_admin2.geojson -n "México" --name-col adm1_name -o data/raw/boundaries/Mex/Mexico_state.gpkg
 
 Kenya example (Shapefile, ADM1):
-  python data_prep/extract_boundary_from_gdb.py -i ken_admbnda_adm1_iebc_20191031.shp -n Mombasa --name-col ADM1_EN -o data/boundaries/Kenya/Mombasa.gpkg
+  python data_prep/extract_boundary_from_gdb.py -i ken_admbnda_adm1_iebc_20191031.shp -n Mombasa --name-col ADM1_EN -o data/raw/boundaries/Kenya/Mombasa.gpkg
 
 Philippines example (PSA NAMRIA GDB):
   python data_prep/extract_boundary_from_gdb.py -i phl_adm_psa_namria_20231106_GDB2.gdb --list
-  python data_prep/extract_boundary_from_gdb.py -i phl_adm_psa_namria_20231106_GDB2.gdb -l phl_admbnda_adm2_psa_namria_20231106 -c PH1102402,PH1004305 -o data/boundaries/mindanao_cities.gpkg --split
+  python data_prep/extract_boundary_from_gdb.py -i phl_adm_psa_namria_20231106_GDB2.gdb -l phl_admbnda_adm2_psa_namria_20231106 -c PH1102402,PH1004305 -o data/raw/boundaries/mindanao_cities.gpkg --split
 
 Dependencies: geopandas, fiona (fiona only for .gdb)
 """

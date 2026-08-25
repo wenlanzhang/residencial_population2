@@ -12,8 +12,12 @@ All analytical sections use share-based variables:
 2. Distribution Similarity: meta_share, worldpop_share (KS, EMD)
 3. Inequality: Gini on shares (spatial allocation inequality)
 4. Spatial Structure: Moran/LISA/Gi* on log(share)
-5. Allocation residual: allocation_residual maps, peripheral vs central
+5. Allocation residual: allocation_residual, peripheral vs central
 6. Agreement Typology: zscore(meta_share), zscore(worldpop_share)
+
+Figures: Rscript pipeline/02_plots.R (publication-style *_r.png). This script
+writes tables and the GPKG; the only Python map is the optional allocation
+residual basemap (contextily).
 
 Requires outputs from 01_harmonise_datasets.py (with worldpop_share, meta_share).
 
@@ -23,7 +27,7 @@ Usage:
   python pipeline/02_compare_meta_worldpop.py -i outputs/01_harmonised_meta_worldpop.gpkg
   # With optional context for residual tests:
   python pipeline/02_compare_meta_worldpop.py --informal informal.gpkg --rural rural.gpkg --nightlight viirs.csv
-  # Basemap versions of residual maps require: pip install contextily xyzservices
+  # Allocation residual basemap requires: pip install contextily xyzservices
 """
 
 import argparse
@@ -35,10 +39,7 @@ import scipy
 if not hasattr(scipy, "inf"):
     scipy.inf = np.inf
 
-import matplotlib
-matplotlib.use("Agg")
 import geopandas as gpd
-import matplotlib.pyplot as plt
 from scipy import stats
 
 # Allow importing poverty_utils from pipeline/
@@ -92,18 +93,6 @@ def gini_coefficient(x):
     n = len(x)
     cumx = np.cumsum(x)
     return (2 * np.sum((np.arange(1, n + 1)) * x) - (n + 1) * np.sum(x)) / (n * np.sum(x))
-
-
-def lorenz_curve(x):
-    """Return (cumulative share of population, cumulative share of value) for Lorenz curve."""
-    x = np.asarray(x)
-    x = x[~np.isnan(x) & (x >= 0)]
-    x = np.sort(x)
-    n = len(x)
-    if n == 0:
-        return np.array([0]), np.array([0])
-    cumx = np.cumsum(x)
-    return np.arange(1, n + 1) / n, cumx / cumx[-1]
 
 
 def _load_context(gdf_valid, path: Path, key_col="quadkey"):
@@ -265,68 +254,10 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
     use_log = abs(skew_wp) > 1 or abs(skew_meta) > 1
     print(f"Population density skewness: WorldPop={skew_wp:.2f}, Meta={skew_meta:.2f} → {'log-scale' if use_log else 'linear'} histograms")
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    for ax, dens, label, color in [(axes[0], density_wp, "WorldPop", "steelblue"), (axes[1], density_meta, "Meta", "coral")]:
-        dens_valid = dens[dens > 0]
-        if use_log and len(dens_valid) > 0:
-            ax.hist(np.log10(dens_valid + 1), bins=40, alpha=0.7, color=color, edgecolor="white", linewidth=0.3)
-            ax.set_xlabel("log₁₀(density + 1) [per km²]")
-        else:
-            ax.hist(dens_valid, bins=40, alpha=0.7, color=color, edgecolor="white", linewidth=0.3)
-            ax.set_xlabel("Population density [per km²]")
-        ax.set_ylabel("Count")
-        ax.set_title(f"{label} — population density per grid cell")
-        ax.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_dir / "02_density_histogram.png", dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"  Saved: {out_dir / '02_density_histogram.png'}")
-
-    # Overlapped version: linear and log scale side by side, with KDE on right Y-axis
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     dens_wp_valid = density_wp[density_wp > 0]
     dens_meta_valid = density_meta[density_meta > 0]
-    all_dens = np.concatenate([dens_wp_valid, dens_meta_valid])
-    bins_lin = np.linspace(all_dens.min(), all_dens.max(), 41) if len(all_dens) > 0 else 40
     x_wp_log = np.log10(dens_wp_valid + 1) if len(dens_wp_valid) > 0 else np.array([])
     x_meta_log = np.log10(dens_meta_valid + 1) if len(dens_meta_valid) > 0 else np.array([])
-    x_all_log = np.concatenate([x_wp_log, x_meta_log])
-    bins_log = np.linspace(x_all_log.min(), x_all_log.max(), 41) if len(x_all_log) > 0 else 40
-
-    def _add_hist_kde(ax, data_wp, data_meta, bins, xlabel, x_eval_wp, x_eval_meta):
-        """Histogram (left Y) + KDE (right Y) for both sources."""
-        ax.hist(data_wp, bins=bins, alpha=0.6, label="WorldPop", color="steelblue", edgecolor="white", linewidth=0.3)
-        ax.hist(data_meta, bins=bins, alpha=0.6, label="Meta", color="coral", edgecolor="white", linewidth=0.3)
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel("Count", color="gray")
-        ax.tick_params(axis="y", labelcolor="gray")
-        ax2 = ax.twinx()
-        if len(data_wp) > 1:
-            kde_wp = stats.gaussian_kde(data_wp, bw_method="scott")
-            ax2.plot(x_eval_wp, kde_wp(x_eval_wp), color="steelblue", lw=2, linestyle="--", alpha=0.9)
-        if len(data_meta) > 1:
-            kde_meta = stats.gaussian_kde(data_meta, bw_method="scott")
-            ax2.plot(x_eval_meta, kde_meta(x_eval_meta), color="coral", lw=2, linestyle="--", alpha=0.9)
-        ax2.set_ylabel("KDE (density)", color="black")
-        ax2.tick_params(axis="y", labelcolor="black")
-        ax.legend(loc="upper right", fontsize=8)
-        ax.grid(True, alpha=0.3)
-
-    # Left: linear scale
-    x_lin = np.linspace(all_dens.min(), all_dens.max(), 200) if len(all_dens) > 0 else np.linspace(0, 1, 200)
-    _add_hist_kde(axes[0], dens_wp_valid, dens_meta_valid, bins_lin, "Population density [per km²]", x_lin, x_lin)
-    axes[0].set_title("Population density (linear)")
-
-    # Right: log scale
-    x_log = np.linspace(x_all_log.min(), x_all_log.max(), 200) if len(x_all_log) > 0 else np.linspace(0, 1, 200)
-    _add_hist_kde(axes[1], x_wp_log, x_meta_log, bins_log, "log₁₀(density + 1) [per km²]", x_log, x_log)
-    axes[1].set_title("Population density (log)")
-
-    plt.suptitle("Population density per grid cell (overlapped)")
-    plt.tight_layout()
-    plt.savefig(out_dir / "02_density_histogram_overlapped.png", dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"  Saved: {out_dir / '02_density_histogram_overlapped.png'}")
 
     # CDF and KS test: spatial probability distribution p_i = x_i / sum(x_i)
     def _prob_dist(x):
@@ -344,79 +275,6 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
 
     ks_dens_lin, p_dens_lin = stats.ks_2samp(dens_wp_prob, dens_meta_prob)
     ks_dens_log, p_dens_log = stats.ks_2samp(x_wp_log_prob, x_meta_log_prob)
-
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-
-    def _concentration_curve(x, weights):
-        """Concentration curve: sort by x, y = cumulative share of weights. Returns (x_sorted, cum_share)."""
-        x, w = np.asarray(x), np.asarray(weights)
-        order = np.argsort(x)
-        x_s = x[order]
-        w_s = w[order]
-        cum = np.cumsum(w_s)
-        if len(cum) == 0:
-            return x_s, cum
-        return x_s, cum / (cum[-1] + 1e-10)
-
-    def _percentile_value(x_sorted, y_sorted, p):
-        """Value at which cumulative share reaches p (e.g. 0.5 = median, 0.8 = 80%)."""
-        idx = np.searchsorted(y_sorted, p, side="left")
-        idx = min(idx, len(x_sorted) - 1)
-        return x_sorted[idx]
-
-    def _plot_cdf_ks(ax, data_wp, data_meta, weights_wp, weights_meta, xlabel, ks_stat, p_val, title,
-                    x_wp_raw, x_meta_raw):
-        """Plot concentration curve (CDF of population share) with 50% and 80% vertical lines."""
-        x_wp, cdf_wp = _concentration_curve(x_wp_raw, weights_wp)
-        x_meta, cdf_meta = _concentration_curve(x_meta_raw, weights_meta)
-        ax.plot(x_wp, cdf_wp, color="steelblue", lw=2, label="WorldPop")
-        ax.plot(x_meta, cdf_meta, color="coral", lw=2, label="Meta")
-        # KS: max vertical distance
-        x_all = np.sort(np.unique(np.concatenate([x_wp, x_meta])))
-        if len(x_all) > 0:
-            cdf_wp_i = np.interp(x_all, x_wp, cdf_wp)
-            cdf_meta_i = np.interp(x_all, x_meta, cdf_meta)
-            idx_max = np.argmax(np.abs(cdf_wp_i - cdf_meta_i))
-            ax.axvline(x_all[idx_max], color="gray", linestyle=":", alpha=0.7)
-        # Median (50%) and 80% concentration vertical lines
-        med_wp = _percentile_value(x_wp, cdf_wp, 0.5)
-        med_meta = _percentile_value(x_meta, cdf_meta, 0.5)
-        p80_wp = _percentile_value(x_wp, cdf_wp, 0.8)
-        p80_meta = _percentile_value(x_meta, cdf_meta, 0.8)
-        ax.axvline(med_wp, color="steelblue", linestyle="--", alpha=0.6, linewidth=1)
-        ax.axvline(med_meta, color="coral", linestyle="--", alpha=0.6, linewidth=1)
-        ax.axvline(p80_wp, color="steelblue", linestyle="-", alpha=0.4, linewidth=0.8)
-        ax.axvline(p80_meta, color="coral", linestyle="-", alpha=0.4, linewidth=0.8)
-        ax.axhline(0.5, color="gray", linestyle=":", alpha=0.4)
-        ax.axhline(0.8, color="gray", linestyle=":", alpha=0.4)
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel("Cumulative share of population")
-        ax.set_title(title)
-        ax.set_ylim(0, 1)
-        p_str = f"<0.001" if p_val < 0.001 else f"{p_val:.3f}"
-        interp_txt = (f"50%: Meta={med_meta:.2g}, WP={med_wp:.2g}\n"
-                      f"80%: Meta={p80_meta:.2g}, WP={p80_wp:.2g}\n"
-                      f"KS (D)={ks_stat:.3f}, p={p_str}")
-        ax.text(0.98, 0.02, interp_txt, transform=ax.transAxes,
-                fontsize=8, verticalalignment="bottom", horizontalalignment="right",
-                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        return med_wp, med_meta, p80_wp, p80_meta
-
-    # Concentration curve: x = density (or log), weights = share of population (p_i)
-    _plot_cdf_ks(axes[0], dens_wp_prob, dens_meta_prob, dens_wp_prob, dens_meta_prob,
-                "Population density [per km²]", ks_dens_lin, p_dens_lin, "Concentration (linear)",
-                dens_wp_valid, dens_meta_valid)
-    _plot_cdf_ks(axes[1], dens_wp_prob, dens_meta_prob, dens_wp_prob, dens_meta_prob,
-                "log₁₀(density + 1) [per km²]", ks_dens_log, p_dens_log, "Concentration (log)",
-                x_wp_log, x_meta_log)
-
-    plt.suptitle("Concentration curves: WorldPop vs Meta — 80% of Meta pop below X vs Y in WorldPop (Kolmogorov–Smirnov)")
-    plt.tight_layout()
-    plt.savefig(out_dir / "02_density_cdf_ks.png", dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"  Saved: {out_dir / '02_density_cdf_ks.png'}")
     print(f"  KS statistic (D) — density linear (pᵢ=xᵢ/Σxᵢ): {ks_dens_lin:.4f}, p={p_dens_lin:.2e}")
     print(f"  KS statistic (D) — density log (pᵢ=xᵢ/Σxᵢ):   {ks_dens_log:.4f}, p={p_dens_log:.2e}")
 
@@ -430,34 +288,6 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
     r_pearson_log, p_pearson_log = stats.pearsonr(log_wp, log_meta)
     print(f"  log(meta_share) vs log(worldpop_share): Spearman ρ = {r_spearman_log:.4f}, Pearson r = {r_pearson_log:.4f}")
     print("  (Positive = similar spatial allocation pattern)")
-
-    # Log-log hexbin plot
-    slope, intercept = np.polyfit(log_meta, log_wp, 1)
-    x_line = np.array([log_meta.min(), log_meta.max()])
-    y_reg = slope * x_line + intercept
-
-    fig, ax = plt.subplots(figsize=(6, 6))
-    hb = ax.hexbin(log_meta, log_wp, gridsize=25, cmap="Blues", mincnt=1, edgecolors="none")
-    lim_lo = min(log_meta.min(), log_wp.min())
-    lim_hi = max(log_meta.max(), log_wp.max())
-    ax.plot([lim_lo, lim_hi], [lim_lo, lim_hi], "k--", lw=1.5, alpha=0.7, label="1:1 line")
-    ax.plot(x_line, y_reg, "r-", lw=1.5, alpha=0.9, label="Regression")
-    ax.set_xlabel("log(meta_share)")
-    ax.set_ylabel("log(worldpop_share)")
-    ax.set_aspect("equal")
-    ax.grid(True, alpha=0.3)
-    txt = (f"log(wp_share) = a + b·log(meta_share)\n"
-           f"Slope b = {slope:.3f}\n"
-           f"Spearman ρ = {r_spearman_log:.3f}\n"
-           f"Pearson r = {r_pearson_log:.3f}")
-    ax.text(0.05, 0.95, txt, transform=ax.transAxes, fontsize=10, verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8))
-    ax.legend(loc="lower right")
-    plt.colorbar(hb, ax=ax, label="Count")
-    plt.tight_layout()
-    plt.savefig(out_dir / "02_scatter_meta_vs_worldpop.png", dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"  Saved: {out_dir / '02_scatter_meta_vs_worldpop.png'}")
 
     # -------------------------------------------------------------------------
     # 1b. Rank Agreement — Top-X overlap, Jaccard, Precision/Recall/F1
@@ -494,30 +324,6 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
     wp_norm = (wp_s - wp_s.min()) / (wp_s.max() - wp_s.min() + 1e-10)
     meta_norm = (meta_s - meta_s.min()) / (meta_s.max() - meta_s.min() + 1e-10)
 
-    # Histograms
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    axes[0].hist(wp_norm, bins=30, alpha=0.7, label="WorldPop", color="steelblue", density=True)
-    axes[0].hist(meta_norm, bins=30, alpha=0.7, label="Meta", color="coral", density=True)
-    axes[0].set_xlabel("Normalized value")
-    axes[0].set_ylabel("Density")
-    axes[0].set_title("Histograms (normalized)")
-    axes[0].legend()
-
-    # KDE
-    x = np.linspace(0, 1, 200)
-    kde_wp = stats.gaussian_kde(wp_norm, bw_method="scott")
-    kde_meta = stats.gaussian_kde(meta_norm, bw_method="scott")
-    axes[1].plot(x, kde_wp(x), label="WorldPop", color="steelblue", lw=2)
-    axes[1].plot(x, kde_meta(x), label="Meta", color="coral", lw=2)
-    axes[1].set_xlabel("Normalized value")
-    axes[1].set_ylabel("Density")
-    axes[1].set_title("Kernel density curves")
-    axes[1].legend()
-    plt.tight_layout()
-    plt.savefig(out_dir / "02_distribution_histogram_kde.png", dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"  Saved: {out_dir / '02_distribution_histogram_kde.png'}")
-
     # KS test
     # ks_stat, ks_pval = stats.ks_2samp(wp_norm, meta_norm)    # normalized shares
     ks_stat, ks_pval = stats.ks_2samp(wp_s, meta_s)    # spatial shares
@@ -542,24 +348,6 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
     print(f"Gini (Meta):     {gini_meta:.4f}")
     print(f"ΔGini (Meta - WorldPop): {delta_gini:.4f}")
     print("  (spatial allocation inequality; positive ΔGini = Meta more unequal)")
-
-    # Lorenz curves (shares)
-    fig, ax = plt.subplots(figsize=(6, 6))
-    pop_wp, val_wp = lorenz_curve(wp_s)
-    pop_meta, val_meta = lorenz_curve(meta_s)
-    ax.plot(np.concatenate([[0], pop_wp]), np.concatenate([[0], val_wp]), label="WorldPop", color="steelblue", lw=2)
-    ax.plot(np.concatenate([[0], pop_meta]), np.concatenate([[0], val_meta]), label="Meta", color="coral", lw=2)
-    ax.plot([0, 1], [0, 1], "k--", alpha=0.5, label="Perfect equality")
-    ax.set_xlabel("Cumulative share of quadkeys (by count)")
-    ax.set_ylabel("Cumulative share of allocation")
-    ax.set_title("Lorenz curves (shares)")
-    ax.legend()
-    ax.set_aspect("equal")
-    ax.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_dir / "02_lorenz_curves.png", dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"  Saved: {out_dir / '02_lorenz_curves.png'}")
 
     # Headline Lorenz: "Top X% of cells contain Y% of allocation"
     n_cells = len(wp_s)
@@ -661,18 +449,6 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
         gdf_valid["lisa_sig_wp"] = np.where(gdf_valid["lisa_p_wp"] < 0.05, gdf_valid["lisa_q_wp"], 0)
         gdf_valid["lisa_sig_meta"] = np.where(gdf_valid["lisa_p_meta"] < 0.05, gdf_valid["lisa_q_meta"], 0)
 
-        gdf_map = _get_map_gdf(gdf_valid, region, region_bbox)
-        for label, col in [("WorldPop", "lisa_sig_wp"), ("Meta", "lisa_sig_meta")]:
-            fig, ax = plt.subplots(figsize=(8, 8))
-            gdf_map.plot(ax=ax, column=col, categorical=True, legend=True, cmap="RdYlBu_r",
-                         legend_kwds={"title": "LISA (1=HH,2=LH,3=LL,4=HL,0=ns)"})
-            ax.set_title(f"LISA — {label}")
-            ax.set_axis_off()
-            plt.tight_layout()
-            plt.savefig(out_dir / f"02_lisa_{label.lower()}.png", dpi=150, bbox_inches="tight")
-            plt.close()
-        print(f"  Saved: 02_lisa_worldpop.png, 02_lisa_meta.png")
-
         gi_wp = G_Local(log_wp, w, transform="r", star=True)
         gi_meta = G_Local(log_meta, w, transform="r", star=True)
 
@@ -708,19 +484,6 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
         hotspot_df.to_csv(out_dir / "02_hotspot_overlap.csv", index=False)
         pd.DataFrame([{"Jaccard_hotspot": jaccard_hotspot}]).to_csv(out_dir / "02_hotspot_jaccard.csv", index=False)
         print(f"  Saved: 02_hotspot_overlap.csv")
-
-        gdf_map = _get_map_gdf(gdf_valid, region, region_bbox)
-        from matplotlib.colors import ListedColormap
-        fig, ax = plt.subplots(figsize=(8, 8))
-        cmap_overlap = ListedColormap(["#4575b4", "#f0f0f0", "#d73027", "#fc8d59", "#998ec3"])
-        gdf_map.plot(ax=ax, column="hotspot_overlap", categorical=True, legend=True, cmap=cmap_overlap,
-                     legend_kwds={"title": "-1=both cold, 0=other, 1=both hot, 2=WP only, 3=Meta only"})
-        ax.set_title("Hotspot overlap (Getis-Ord Gi*)")
-        ax.set_axis_off()
-        plt.tight_layout()
-        plt.savefig(out_dir / "02_hotspot_overlap_map.png", dpi=150, bbox_inches="tight")
-        plt.close()
-        print(f"  Saved: 02_hotspot_overlap_map.png")
     except ImportError as e:
         print(f"  Skipped (install libpysal, esda): {e}")
     except Exception as e:
@@ -743,34 +506,15 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
     gdf_valid["allocation_residual"] = allocation_log_ratio
 
     gdf_map = _get_map_gdf(gdf_valid, region)
-    def _residual_map(gdf, col, title, fname, vmin=None, vmax=None):
-        if len(gdf) == 0:
-            print(f"  Skipped {fname}: no features in map extent")
-            return
-        v = gdf[col].values
-        if vmin is None or vmax is None:
-            lim = max(abs(np.nanmin(v)), abs(np.nanmax(v)), 1e-6)
-            vmin = vmin if vmin is not None else -lim
-            vmax = vmax if vmax is not None else lim
-        fig, ax = plt.subplots(figsize=(8, 8))
-        gdf.plot(ax=ax, column=col, legend=True, cmap="RdBu_r", legend_kwds={"shrink": 0.6},
-                 vmin=vmin, vmax=vmax)
-        ax.set_title(title)
-        ax.set_axis_off()
-        plt.tight_layout()
-        plt.savefig(out_dir / fname, dpi=150, bbox_inches="tight")
-        plt.close()
-
-    # Allocation residual map only
     map_configs = [
         ("allocation_residual", "Allocation residual: log(meta_share / worldpop_share)", "02_allocation_log_ratio.png", None, None),
     ]
-    for col, title, fname, vmin, vmax in map_configs:
-        _residual_map(gdf_map, col, title, fname, vmin, vmax)
-    print("  Saved residual maps.")
 
-    # Basemap versions (Sentinel-2 or satellite)
+    # Basemap version (no R equivalent; choropleth is 02_allocation_log_ratio_r.png)
     try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
         if len(gdf_map) == 0:
             print("  Skipped basemap: no features in map extent")
         else:
@@ -882,7 +626,6 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
     # 6. Agreement Typology — HH/LL/HL/LH (zscore of shares)
     # -------------------------------------------------------------------------
     print("\n--- 6. Agreement Typology (zscore shares) ---")
-    from matplotlib.colors import ListedColormap
 
     z_wp = (wp_s - wp_s.mean()) / (wp_s.std() + 1e-10)
     z_meta = (meta_s - meta_s.mean()) / (meta_s.std() + 1e-10)
@@ -936,34 +679,6 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
     sens_df = pd.DataFrame(sens_rows)
     sens_df.to_csv(out_dir / "02_agreement_typology_sensitivity.csv", index=False)
     print(f"  Saved: 02_agreement_typology_sensitivity.csv")
-
-    gdf_map = _get_map_gdf(gdf_valid, region)
-    # Map A: median split
-    if len(gdf_map) == 0:
-        print("  Skipped agreement typology maps: no features in map extent")
-    else:
-        fig, ax = plt.subplots(figsize=(8, 8))
-        cmap_typ = ListedColormap(["#d73027", "#fc8d59", "#91cf60", "#1a9850"])
-        gdf_map.plot(ax=ax, column="agreement_typology_median", categorical=True, legend=True, cmap=cmap_typ,
-                     legend_kwds={"title": "1=HH, 2=LH, 3=LL, 4=HL"})
-        ax.set_title("Agreement typology (median split)")
-        ax.set_axis_off()
-        plt.tight_layout()
-        plt.savefig(out_dir / "02_agreement_typology_median.png", dpi=150, bbox_inches="tight")
-        plt.close()
-        print(f"  Saved: 02_agreement_typology_median.png")
-
-        # Map B: quartile split (use 5 colors: other=gray)
-        fig, ax = plt.subplots(figsize=(8, 8))
-        cmap_q = ListedColormap(["#d73027", "#fc8d59", "#91cf60", "#1a9850", "#e0e0e0"])
-        gdf_map.plot(ax=ax, column="agreement_typology_quartile", categorical=True, legend=True, cmap=cmap_q,
-                     legend_kwds={"title": "1=HH, 2=LH, 3=LL, 4=HL, 0=other"})
-        ax.set_title("Agreement typology (quartile split — strong disagreements)")
-        ax.set_axis_off()
-        plt.tight_layout()
-        plt.savefig(out_dir / "02_agreement_typology_quartile.png", dpi=150, bbox_inches="tight")
-        plt.close()
-        print(f"  Saved: 02_agreement_typology_quartile.png")
 
     # Keep legacy column for downstream compatibility
     gdf_valid["agreement_typology"] = typology_med
@@ -1052,8 +767,8 @@ def main():
             args.region_bbox = None if clip_utils.has_clip_boundary(cfg) else cfg.get("map_bbox")
             args.region_label = cfg.get("map_bbox_label") or cfg.get("name") or args.region
             if args.input is None:
-                args.input = region_config.get_output_dir(args.region, "01") / "harmonised_meta_worldpop.gpkg"
-            out_dir = region_config.get_output_dir(args.region, "02")
+                args.input = region_config.geo_dir(args.region, "01") / "harmonised_meta_worldpop.gpkg"
+            out_dir = region_config.step_paths(args.region, "02")
         except (ImportError, ValueError) as e:
             raise SystemExit(f"Invalid --region {args.region}: {e}")
     else:

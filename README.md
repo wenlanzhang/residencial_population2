@@ -52,44 +52,28 @@ Cross-city scripts also need `tidyr`: see `cross-city/README.md`.
 **The one entry point** (Bash wrapper, zsh-safe) is `./run`, which calls `pipeline/run_all.sh`. If the Meta baseline GPKG is missing, it is built from the PDC zip first, then every Python step and the matching R script run in the same order as the [manual recipe in](pipeline/PIPELINE.md#manual-step-by-step-order) `pipeline/PIPELINE.md` (01 → 02 → 04 → 03a–03f, with 01/02/03a–c/03e/03f each followed by their `*_plots.R` where applicable; 03d is R-only).
 
 ```bash
-# Single region (builds Meta baseline if needed, then runs the pipeline)
-./run --region PHI_CagayandeOroCity
-./run --region IDN_Medan
-
-# City clips for the new events (OSM; does not overwrite outputs/IDN etc.)
-./run --region IDN_Medan,IDN_BandaAceh,LKA_Colombo,LKA_Kandy,COL_Barranquilla,COL_Cartagena,ECU_Cuenca,ECU_Guayaquil,ZAF_CapeTown,ZAF_GardenRoute
-
-# Event-level extract (no city clip; slow)
-./run --region IDN
-
-# Country prefix (PHI = all Philippines cities, KEN = all Kenya cities)
+# All selected cities in a country (clipped in step 01)
 ./run --region PHI
 ./run --region KEN
-# Or: bash ./pipeline/run_all.sh --region PHI_CagayandeOroCity
+./run --region MEX          # Mexico City, Puebla, León
+./run --region IDN          # Medan, Banda Aceh (not the unclipped extract)
 
-# Reference hour (baseline is built for that hour if the GPKG is missing)
-./run --region PHI_CagayandeOroCity --ref-hour 8
-./run --all --ref-hour 8
+# Unclipped Meta extract — all cells in the event AOI (slow). PHI/KEN/MEX have no extract region.
+./run --region IDN --all
+./run --region LKA --all
+./run --region COL --all
+./run --region ECU --all
+./run --region ZAF --all
 
+# Every selected city in every country
 ./run --all
-./run --all --no-basemap          # Skip basemap tiles
+./run --all --no-basemap
 
-./run --region PHI                # Philippines cities
-./run --region KEN --no-basemap    # Nairobi + Mombasa
-
-./run --region KEN_Nairobi
-./run --region MEX --no-basemap
-
-# Poverty layer (default: GRDI). Use Meta RWI instead:
-./run --region KEN_Nairobi --poverty-source rwi
-
-# City boundary (default: local clip_shape file). OSM or geoBoundaries:
-./run --region KEN_Nairobi --clip-source osm
-./run --region KEN_Nairobi --clip-source geob
-
-# Resume: 01, 02, 04, 03a, 03b, 03c, 03d, 03e, or 03f — see PIPELINE.md
-./run --region PHI_CagayandeOroCity --start-from 03b
-./run --region PHI_CagayandeOroCity --start-from 03f
+# Options (apply to the country run)
+./run --region KEN --ref-hour 8
+./run --region KEN --poverty-source rwi
+./run --region KEN --clip-source geob
+./run --region PHI --start-from 03b
 ```
 
 To run scripts **manually** (or to see every `Rscript` line the wrapper uses), use only `pipeline/PIPELINE.md` **[→ Manual step-by-step order](pipeline/PIPELINE.md#manual-step-by-step-order)** so the list is not duplicated here.
@@ -99,19 +83,18 @@ To run scripts **manually** (or to see every `Rscript` line the wrapper uses), u
 After running per-region pipelines (or `./run --all`):
 
 ```bash
-python cross-city/run_cross_city_table.py
 python cross-city/run_cross_city_table.py --aggregate-only
-python cross-city/run_cross_city_table.py --regions KEN_Nairobi,KEN_Mombasa,MEX,PHI_CagayandeOroCity
-python cross-city/run_cross_city_table.py -o outputs/cross-city/
+python cross-city/run_cross_city_table.py --regions PHI,KEN,MEX
+python cross-city/run_cross_city_table.py --include-full
 ```
 
-**Figures:** `Rscript cross-city/figures_cross_city.R -o outputs/cross-city/`
+**Figures:** `Rscript cross-city/figures_cross_city.R` (PNGs in `figure/cross-city/`).
 
 Tables, figure filenames, and options: `cross-city/README.md`.
 
 ## Data defaults
 
-Poverty defaults to **GRDI v1.10** at `data/povmap-grdi-v1-10.tif` (global GeoTIFF; place the file there, it is gitignored). WorldPop country rasters live in `data/worldpop/` (also gitignored). Per-region Meta RWI CSVs stay in `config/regions.json` under `poverty` for `--poverty-source rwi`.
+Poverty defaults to **GRDI v1.10** at `data/raw/povmap-grdi-v1-10.tif` (global GeoTIFF; place the file there, it is gitignored). WorldPop country rasters live in `data/raw/worldpop/` (also gitignored). Per-region Meta RWI CSVs stay in `config/regions.json` under `poverty` for `--poverty-source rwi`.
 
 Override defaults from `config/regions.json` with CLI flags, e.g.:
 

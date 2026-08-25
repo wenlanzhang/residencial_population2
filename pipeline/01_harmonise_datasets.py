@@ -44,10 +44,10 @@ except ImportError:
 
 # Default paths (used when --region not set)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_BASE = PROJECT_ROOT / "data"  # WorldPop, Poverty rasters; put files here or override with CLI
-DEFAULT_WORLDPOP = PROJECT_ROOT / "data" / "worldpop" / "phl_pop_2026_CN_100m_R2025A_v1.tif"
+DEFAULT_BASE = PROJECT_ROOT / "data" / "raw"  # WorldPop, Poverty rasters; put files here or override with CLI
+DEFAULT_WORLDPOP = PROJECT_ROOT / "data" / "raw" / "worldpop" / "phl_pop_2026_CN_100m_R2025A_v1.tif"
 DEFAULT_META = PROJECT_ROOT / "outputs" / "fb_baseline_median_PHI.gpkg"  # from build_fb_baseline_median.py
-DEFAULT_POVERTY = PROJECT_ROOT / "data" / "povmap-grdi-v1-10.tif"
+DEFAULT_POVERTY = PROJECT_ROOT / "data" / "raw" / "povmap-grdi-v1-10.tif"
 
 
 def filter_quadkeys(gdf, by=None, min_val=50):
@@ -136,7 +136,7 @@ def main():
         if args.meta is not None:
             meta_path = args.meta
         elif args.ref_hour is not None:
-            meta_path = PROJECT_ROOT / "outputs" / args.region / f"fb_baseline_median_h{args.ref_hour:02d}.gpkg"
+            meta_path = region_config.baseline_path(args.region, args.ref_hour)
         else:
             meta_path = cfg["meta"]
         if args.no_poverty:
@@ -162,7 +162,7 @@ def main():
             cfg["clip_geob_name"] = args.clip_geob_name
         clip_source = args.clip_source or cfg.get("clip_source") or "local"
         cfg["clip_source"] = clip_source
-        out_dir = region_config.get_output_dir(args.region, "01")
+        out_dir = region_config.step_paths(args.region, "01")
         print(f"Region: {args.region} ({cfg.get('name', args.region)})")
         if not args.no_poverty:
             print(f"Poverty source: {poverty_source} → {poverty_path}")

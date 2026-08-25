@@ -198,7 +198,7 @@ def build_baseline_for_region(region: str, ref_hour: int, args) -> None:
     if not input_path:
         raise ValueError(f"Region {region} needs pdc_raw_dir or pdc_processed_csv in config")
 
-    output_path = args.output or (PROJECT_ROOT / "outputs" / region / f"fb_baseline_median_h{ref_hour:02d}.gpkg")
+    output_path = args.output or region_config.baseline_path(region, ref_hour)
 
     print(f"\n--- {region} ({cfg.get('name', region)}), ref_hour={ref_hour} ---")
 
@@ -305,6 +305,8 @@ def build_baseline_for_region(region: str, ref_hour: int, args) -> None:
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.is_symlink() or output_path.exists():
+        output_path.unlink()
     gdf.to_file(output_path, layer="fb_baseline_median", driver="GPKG")
     col = "fb_baseline_median"
     print(f"Saved: {output_path} ({col}: min={gdf[col].min():.1f}, max={gdf[col].max():.1f}, sum={gdf[col].sum():.0f})")
@@ -461,6 +463,8 @@ def main():
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.is_symlink() or output_path.exists():
+        output_path.unlink()
     gdf.to_file(output_path, layer="fb_baseline_median", driver="GPKG")
     col = "fb_baseline_median"
     print(f"Saved: {output_path}")

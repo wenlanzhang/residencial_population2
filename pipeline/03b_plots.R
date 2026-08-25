@@ -33,18 +33,30 @@ theme_nature <- function(base_size = 10, base_family = "sans") {
 }
 
 project_root <- "/Users/wenlanzhang/PycharmProjects/Residential_population2"
+script_dir <- file.path(project_root, "pipeline")
+source(file.path(script_dir, "region_config.R"), local = TRUE)
 in_dir <- file.path(project_root, "outputs", "03b_stratified")
 out_dir <- in_dir
-# Allow -i to override (for multi-region: -i outputs/PHI/03b_stratified)
+region_arg <- NULL
+o_arg <- NULL
 args <- commandArgs(trailingOnly = TRUE)
-for (i in seq_along(args)) {
+i <- 1
+while (i <= length(args)) {
   if (args[i] == "-i" && i < length(args)) {
     in_dir <- args[i + 1]
-    out_dir <- if (dir.exists(in_dir)) in_dir else dirname(in_dir)
     in_dir <- if (dir.exists(in_dir)) in_dir else dirname(in_dir)
-    break
+    i <- i + 2
+  } else if (args[i] == "-o" && i < length(args)) {
+    o_arg <- args[i + 1]
+    i <- i + 2
+  } else if (args[i] == "--region" && i < length(args)) {
+    region_arg <- args[i + 1]
+    i <- i + 2
+  } else {
+    i <- i + 1
   }
 }
+out_dir <- resolve_plot_out_dir(region_arg, in_dir, "03b_stratified", o_arg)
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 # 1. Marginal effects (poverty × residual at median density)

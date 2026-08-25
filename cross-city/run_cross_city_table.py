@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
-Cross-city comparison: run steps 01, 02, 03c for multiple regions, aggregate into summary tables.
+Cross-city comparison: run steps 01, 02, 03c for selected cities, then aggregate.
 
-Table 1: City | N Cells | Total WorldPop | Total Meta (FB) | Total area (km²) | Spearman ρ | Pearson r | ...
-Table 2: City | OLS τ | SEM τ | exp(SEM τ) | SEM p-value  (Poverty Effect, Spatially Corrected)
+Default is every selected study city in config (same unit as ./run --region COUNTRY).
+Cities without outputs are skipped. Pass --include-full to add unclipped country extracts
+(outputs/{COUNTRY}/full) alongside the city rows.
+
+Tables → outputs/cross-city/. Figures → figure/cross-city/.
 
 Usage:
-  python cross-city/run_cross_city_table.py                    # Run 01+02+03c for all regions, then aggregate
-  python cross-city/run_cross_city_table.py --aggregate-only   # Only aggregate from existing outputs
-  python cross-city/run_cross_city_table.py --regions KEN_Nairobi,KEN_Mombasa,MEX  # Limit to specific regions
+  python cross-city/run_cross_city_table.py
+  python cross-city/run_cross_city_table.py --aggregate-only
+  python cross-city/run_cross_city_table.py --regions PHI,KEN,MEX
+  python cross-city/run_cross_city_table.py --include-full
 """
 
 import argparse
@@ -26,20 +30,32 @@ SCRIPTS = PROJECT_ROOT / "pipeline"
 sys.path.insert(0, str(SCRIPTS))
 
 
-def get_regions(regions_arg=None):
-    """Get list of region codes from config. Supports prefixes: PHI -> both PHI cities, KEN -> both Kenya cities."""
+def get_regions(regions_arg=None, include_full=False):
+    """Selected study cities (default). Country codes expand (MEX → all Mexico cities)."""
     import region_config
-    all_regions = region_config.list_regions()
     if regions_arg:
         requested = [r.strip() for r in regions_arg.split(",") if r.strip()]
         result = []
         for r in requested:
-            expanded = region_config.expand_region_to_list(r)
-            if not expanded:
-                continue
+            try:
+                expanded = region_config.expand_region_to_list(r, event=False)
+            except ValueError:
+                expanded = []
+            if not expanded and r in region_config.list_regions():
+                expanded = [r]
             result.extend(expanded)
-        return list(dict.fromkeys(result))  # dedupe; empty if no matches
-    return all_regions
+        codes = list(dict.fromkeys(result))
+    else:
+        codes = list(region_config.list_cities())
+    if include_full:
+        extras = region_config.list_event_regions()
+        if regions_arg:
+            prefixes = {region_config.country_prefix(c) for c in codes}
+            extras = [e for e in extras if e in prefixes]
+        for e in extras:
+            if e not in codes:
+                codes.append(e)
+    return codes
 
 
 def run_step_01(
@@ -70,9 +86,18 @@ def run_step_02(region: str) -> bool:
 def run_step_03c(region: str) -> bool:
     """Run spatial regression (03c) for region. Returns True on success."""
     import region_config
-    gpkg_02 = region_config.get_output_dir(region, "02") / "harmonised_with_residual.gpkg"
-    out_root = region_config.get_output_dir(region, "02").parent
-    cmd = [sys.executable, str(SCRIPTS / "03c_spatial_regression.py"), "-i", str(gpkg_02), "-o", str(out_root)]
+    gpkg_02 = region_config.find_artifact(region, "02", "harmonised_with_residual.gpkg")
+    if gpkg_02 is None:
+        print(f"  No step-02 GPKG for {region}")
+        return False
+    cmd = [
+        sys.executable,
+        str(SCRIPTS / "03c_spatial_regression.py"),
+        "-i",
+        str(gpkg_02),
+        "--region",
+        region,
+    ]
     result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
     return result.returncode == 0
 
@@ -83,27 +108,30 @@ def extract_metrics_from_region(region: str) -> dict | None:
     Reads Table1 and lorenz_headlines CSVs, or computes from harmonised_with_residual.gpkg.
     """
     import region_config
-    out_dir = region_config.get_output_dir(region, "02")
     cfg = region_config.get_region_config(region)
-    city_label = cfg.get("city_label") or cfg.get("map_bbox_label") or cfg.get("name") or region
+    city_label = region_config.display_label(region, cfg)
 
-    # Try reading from CSVs first
-    tbl1_path = out_dir / "Table1_meta_worldpop_metrics.csv"
-    lorenz_path = out_dir / "02_lorenz_headlines.csv"
-    gpkg_path = out_dir / "harmonised_with_residual.gpkg"
-    gpkg_01_path = region_config.get_output_dir(region, "01") / "harmonised_meta_worldpop.gpkg"
+    tbl1_path = region_config.find_artifact(region, "02", "Table1_meta_worldpop_metrics.csv")
+    lorenz_path = region_config.find_artifact(region, "02", "02_lorenz_headlines.csv")
+    gpkg_path = region_config.find_artifact(region, "02", "harmonised_with_residual.gpkg")
+    gpkg_01_path = region_config.find_artifact(region, "01", "harmonised_meta_worldpop.gpkg")
 
-    if not gpkg_path.exists():
+    if gpkg_path is None:
         return None
 
     import geopandas as gpd
 
     # Step 02 GPKG = analysis grid only (both shares > 0; zeros dropped in 02_compare_meta_worldpop.py).
     gdf_analysis = gpd.read_file(gpkg_path)
-    metrics = {"City": city_label, "Region": region}
+    metrics = {
+        "Country": region_config.country_display_name(region),
+        "City": city_label,
+        "Region": region,
+    }
 
     # City-wide totals (step 01): all harmonised quadkeys, including zeros — geodata export unchanged.
-    if gpkg_01_path.exists():
+    has_01 = gpkg_01_path is not None
+    if has_01:
         gdf_all = gpd.read_file(gpkg_01_path)
         metrics.update(_harmonised_city_totals(gdf_all))
     else:
@@ -121,7 +149,7 @@ def extract_metrics_from_region(region: str) -> dict | None:
     )
 
     # Harmonised grid area as % of the city boundary used in step 01.
-    gdf_for_crs = gdf_all if gpkg_01_path.exists() else gdf_analysis
+    gdf_for_crs = gdf_all if has_01 else gdf_analysis
     city_boundary_km2 = _city_boundary_area_km2(cfg, gdf_for_crs, region)
     metrics.update(
         _grid_area_pct_of_city(
@@ -134,7 +162,7 @@ def extract_metrics_from_region(region: str) -> dict | None:
     gdf = gdf_analysis  # downstream metrics read from analysis grid
 
     # Read Table1 if available
-    if tbl1_path.exists():
+    if tbl1_path is not None:
         tbl1 = pd.read_csv(tbl1_path)
         metric_to_val = dict(zip(tbl1.iloc[:, 0], tbl1.iloc[:, 1]))
         n_from_csv = int(metric_to_val.get("Number of quadkeys", 0))
@@ -172,7 +200,7 @@ def extract_metrics_from_region(region: str) -> dict | None:
         metrics["Mean_Residual"] = float(np.nanmean(res)) if len(res) > 0 else np.nan
 
     # Top 10% WP, Top 10% Meta, Δ Top 10% from lorenz_headlines or compute
-    if lorenz_path.exists():
+    if lorenz_path is not None:
         lorenz = pd.read_csv(lorenz_path)
         # First row is Top 10% (pct=0.10)
         if len(lorenz) > 0:
@@ -211,16 +239,15 @@ def extract_rank_instability_from_region(region: str) -> dict | None:
     """Load Table_rank_instability.csv from 03b_stratified when present."""
     import region_config
 
-    path = region_config.get_output_dir(region, "02").parent / "03b_stratified" / "Table_rank_instability.csv"
-    if not path.exists():
+    path = region_config.find_artifact(region, "03b_stratified", "Table_rank_instability.csv")
+    if path is None:
         return None
     df = pd.read_csv(path)
     if df.empty:
         return None
-    cfg = region_config.get_region_config(region)
-    city_label = cfg.get("city_label") or cfg.get("map_bbox_label") or cfg.get("name") or region
     row = df.iloc[0].to_dict()
-    row["City"] = city_label
+    row["Country"] = region_config.country_display_name(region)
+    row["City"] = region_config.display_label(region)
     row["Region"] = region
     return row
 
@@ -231,12 +258,8 @@ def extract_poverty_effect_from_region(region: str) -> dict | None:
     Columns: City, OLS τ, SEM τ, exp(SEM τ), SEM p-value
     """
     import region_config
-    out_dir = region_config.get_output_dir(region, "02").parent / "03c_spatial_regression"
-    cfg = region_config.get_region_config(region)
-    city_label = cfg.get("city_label") or cfg.get("map_bbox_label") or cfg.get("name") or region
-
-    tau_path = out_dir / "Table_tau_comparison.csv"
-    if not tau_path.exists():
+    tau_path = region_config.find_artifact(region, "03c_spatial_regression", "Table_tau_comparison.csv")
+    if tau_path is None:
         return None
 
     df = pd.read_csv(tau_path)
@@ -256,7 +279,8 @@ def extract_poverty_effect_from_region(region: str) -> dict | None:
         return f"{p:.3f}"
 
     return {
-        "City": city_label,
+        "Country": region_config.country_display_name(region),
+        "City": region_config.display_label(region),
         "Region": region,
         "OLS_tau": ols_tau,
         "SEM_tau": sem_tau,
@@ -309,7 +333,7 @@ def _polygon_area_km2(gdf) -> float:
 def _city_boundary_area_km2(cfg, reference_gdf, region: str | None = None) -> float | None:
     """Area of the city clip polygon in km² (same UTM as grid).
 
-    Prefers the polygon saved by step 01 (`outputs/{REGION}/01/clip_boundary.gpkg`)
+    Prefers the polygon saved by step 01 (`data/processed/{COUNTRY}/{city}/01/clip_boundary.gpkg`)
     so OSM/geoBoundaries runs match the boundary that was actually used.
     """
     import geopandas as gpd
@@ -319,8 +343,8 @@ def _city_boundary_area_km2(cfg, reference_gdf, region: str | None = None) -> fl
     code = region or cfg.get("region_code")
     boundary = None
     if code:
-        saved = region_config.get_output_dir(code, "01") / "clip_boundary.gpkg"
-        if saved.exists():
+        saved = region_config.find_artifact(code, "01", "clip_boundary.gpkg")
+        if saved is not None:
             boundary = gpd.read_file(saved)
     if boundary is None:
         try:
@@ -437,7 +461,12 @@ def main():
         "--regions",
         type=str,
         default=None,
-        help="Comma-separated region codes (default: all from config)",
+        help="Country codes (PHI,KEN,MEX) or city codes; default: all selected cities",
+    )
+    p.add_argument(
+        "--include-full",
+        action="store_true",
+        help="Also include unclipped country extracts (outputs/{COUNTRY}/full)",
     )
     p.add_argument(
         "-o", "--output",
@@ -468,7 +497,7 @@ def main():
     )
     args = p.parse_args()
 
-    regions = get_regions(args.regions)
+    regions = get_regions(args.regions, include_full=args.include_full)
     if not regions:
         print("No regions to process. Check --regions or config/regions.json.")
         sys.exit(1)
@@ -506,7 +535,9 @@ def main():
     df = pd.DataFrame(rows)
     # Reorder columns for table
     col_order = [
+        "Country",
         "City",
+        "Region",
         "N_Cells_total",
         "Total_WorldPop",
         "Total_Meta_FB",
@@ -574,7 +605,8 @@ def main():
 
     if tbl2_rows:
         df2 = pd.DataFrame(tbl2_rows)
-        df2_out = df2[["City", "OLS_tau", "SEM_tau", "exp_SEM_tau", "SEM_p_fmt"]].copy()
+        keep2 = [c for c in ("Country", "City", "Region", "OLS_tau", "SEM_tau", "exp_SEM_tau", "SEM_p_fmt") if c in df2.columns]
+        df2_out = df2[keep2].copy()
         df2_out = df2_out.rename(columns={
             "OLS_tau": "OLS τ",
             "SEM_tau": "SEM τ",
@@ -600,7 +632,7 @@ def main():
 
     if rank_rows:
         df_rank = pd.DataFrame(rank_rows)
-        front = ["City", "Region"]
+        front = [c for c in ("Country", "City", "Region") if c in df_rank.columns]
         rest = [c for c in df_rank.columns if c not in front]
         df_rank = df_rank[front + sorted(rest)]
         rank_out = out_dir / "Table_rank_instability_cross_city.csv"

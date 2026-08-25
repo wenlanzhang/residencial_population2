@@ -25,7 +25,7 @@ Outputs (under outputs/{REGION}/04_impact/ by default):
   Table4b_allocation_sensitivity.csv — budget share to high-poverty cells (poverty_mean ≥ p75) and allocation Gini;
       rows: full_grid and analysis_sample_only (same mask as 03b) when residual + poverty allow.
   Optional Python maps/GPKG: 04_delta_people_wp_total.png, 04_delta_people_meta_total.png, 04_impact_per_cell.gpkg
-  R figures: pipeline/04_plots.R — dumbbell (high-poverty shares), bar chart (M), combined Figure6_Operation_Impact; see script header for --cross-city.
+  R figures: pipeline/04_plots.R — dumbbell (high-poverty shares), bar chart (M), combined 04_operation_impact; see script header for --cross-city.
 """
 
 from __future__ import annotations
@@ -48,8 +48,8 @@ def _resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:
     if args.region:
         import region_config
 
-        inp = region_config.get_output_dir(args.region, "02") / "harmonised_with_residual.gpkg"
-        out_root = args.output_dir if args.output_dir is not None else (PROJECT_ROOT / "outputs" / args.region)
+        inp = region_config.geo_dir(args.region, "02") / "harmonised_with_residual.gpkg"
+        out_root = args.output_dir if args.output_dir is not None else region_config.csv_dir(args.region)
         return inp, out_root
     inp = args.input or DEFAULT_INPUT
     out_root = args.output_dir or PROJECT_ROOT / "outputs"
@@ -139,8 +139,12 @@ def main():
     if not input_path.exists():
         raise FileNotFoundError(f"Missing input: {input_path}. Run step 02 first.")
 
-    out_dir = out_root / OUT_SUBDIR
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if args.region:
+        import region_config
+        out_dir = region_config.step_paths(args.region, OUT_SUBDIR)
+    else:
+        out_dir = out_root / OUT_SUBDIR
+        out_dir.mkdir(parents=True, exist_ok=True)
 
     import geopandas as gpd
 

@@ -56,6 +56,9 @@ while (i <= length(args)) {
     i <- i + 1
   }
 }
+if (!is.null(region_arg) && nzchar(region_arg)) {
+  out_dir <- figure_dir(region_arg, "03d_bivariate")
+}
 output_path <- file.path(out_dir, "03d_bivariate_poverty_residual.png")
 output_path_basemap <- file.path(out_dir, "03d_bivariate_poverty_residual_basemap.png")
 
