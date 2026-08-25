@@ -13,3 +13,4 @@ esda>=2.0  # Moran's I (spatial autocorrelation)
 spreg>=1.2  # spatial regression (SLM, SEM)
 contextily>=1.4  # basemap tiles for residual maps (Sentinel-2, Esri, OSM)
 xyzservices>=2023.0  # tile providers for contextily
+osmnx>=1.9  # optional; OSM city boundaries (--clip-source osm). Nominatim is used if missing.

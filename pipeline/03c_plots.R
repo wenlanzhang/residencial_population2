@@ -30,13 +30,16 @@ source(file.path(script_dir, "region_config.R"), local = TRUE)
 in_dir <- file.path(project_root, "outputs", "03c_spatial_regression")
 out_dir <- in_dir
 region_arg <- NULL
+o_arg <- NULL
 args <- commandArgs(trailingOnly = TRUE)
 i <- 1
 while (i <= length(args)) {
   if (args[i] == "-i" && i < length(args)) {
     in_dir <- args[i + 1]
-    out_dir <- if (dir.exists(in_dir)) in_dir else dirname(in_dir)
     in_dir <- if (dir.exists(in_dir)) in_dir else dirname(in_dir)
+    i <- i + 2
+  } else if (args[i] == "-o" && i < length(args)) {
+    o_arg <- args[i + 1]
     i <- i + 2
   } else if (args[i] == "--region" && i < length(args)) {
     region_arg <- args[i + 1]
@@ -45,6 +48,7 @@ while (i <= length(args)) {
     i <- i + 1
   }
 }
+out_dir <- resolve_plot_out_dir(region_arg, in_dir, "03c_spatial_regression", o_arg)
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 gpkg_path <- file.path(in_dir, "03c_residuals_for_plots.gpkg")

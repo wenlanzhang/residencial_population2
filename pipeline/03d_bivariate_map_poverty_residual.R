@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 # 03d — Bivariate map: Poverty × Allocation residual (Digital invisibility hotspots)
 #
-# Poverty (MPI): high = more poverty
+# Poverty (higher = more deprived; GRDI default, or -RWI)
 # Allocation residual = log(meta_share / worldpop_share): negative = Meta under-allocates
 # Key quadrant: High poverty (3) + Negative residual (1) = 3-1 = Digital invisibility
 #
@@ -55,6 +55,9 @@ while (i <= length(args)) {
   } else {
     i <- i + 1
   }
+}
+if (!is.null(region_arg) && nzchar(region_arg)) {
+  out_dir <- figure_dir(region_arg, "03d_bivariate")
 }
 output_path <- file.path(out_dir, "03d_bivariate_poverty_residual.png")
 output_path_basemap <- file.path(out_dir, "03d_bivariate_poverty_residual_basemap.png")

@@ -15,7 +15,8 @@ Required columns (student-facing):
   - cell_id: unique ID (quadkey)
   - x_meta: Meta baseline population count (per cell)
   - x_wp: WorldPop population count (per cell)
-  - wealth: Relative Wealth Index (RWI) with higher = wealthier
+  - wealth: higher = wealthier. For RWI this is Meta Relative Wealth Index.
+    For GRDI this is -poverty_mean (not Meta RWI).
   - x_coord, y_coord: centroid coordinates in a projected CRS (meters)
   - area: cell area (m^2)
 
@@ -26,8 +27,10 @@ Helpful extras:
   - residual (optional helper): log((p_meta + eps) / (p_wp + eps))
 
 Notes:
-  - The pipeline stores poverty as poverty_mean = -RWI (so higher = poorer).
-    We convert back to wealth as wealth = -poverty_mean.
+  - Pipeline poverty_mean is always higher = poorer (GRDI as-is, or -RWI).
+  - For RWI (poverty_source == "rwi"): wealth = -poverty_mean (Meta RWI).
+  - For GRDI (default): wealth = -poverty_mean so higher still means wealthier; this is
+    inverted deprivation, not Meta RWI. Column poverty_source is written on the table.
   - Filtering follows the "valid cell" rule: x_meta > 0 AND x_wp > 0 AND wealth not missing.
 """
 
@@ -79,8 +82,17 @@ def prepare_region(input_gpkg: Path, projected_crs: str | None = None) -> tuple[
         if col not in gdf.columns:
             raise ValueError(f"Expected '{col}' column in {input_gpkg}")
 
-    # wealth: convert back from pipeline's poverty_mean = -RWI
-    wealth = -pd.to_numeric(gdf["poverty_mean"], errors="coerce")
+    poverty = pd.to_numeric(gdf["poverty_mean"], errors="coerce")
+    if "poverty_source" in gdf.columns:
+        src_vals = gdf["poverty_source"].dropna().astype(str).str.lower()
+        poverty_source = src_vals.iloc[0] if len(src_vals) else "unknown"
+    else:
+        # Legacy GPKG from RWI-only runs (no poverty_source column)
+        poverty_source = "rwi" if bool((poverty < 0).any()) else "grdi"
+
+    # Student-facing wealth: higher = wealthier. Invert poverty_mean for both sources.
+    # RWI: this recovers Meta RWI. GRDI: this is -GRDI, not Meta RWI.
+    wealth = -poverty
 
     valid = (
         pd.to_numeric(gdf["meta_baseline"], errors="coerce").fillna(0) > 0
@@ -130,6 +142,7 @@ def prepare_region(input_gpkg: Path, projected_crs: str | None = None) -> tuple[
             "x_wp": x_wp,
             "wealth": gdf_wgs84["wealth"].astype(float).to_numpy(),
             "wealth_rank": wealth_rank,
+            "poverty_source": poverty_source,
             "x_coord": x,
             "y_coord": y,
             "area": area_m2,

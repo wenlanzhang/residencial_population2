@@ -69,9 +69,9 @@ while (i <= length(args)) {
     if (region_arg == "auto") region_arg <- NULL
     if (!is.null(region_arg)) {
       regions <- load_regions()
-      valid <- setdiff(names(regions), "data_root")
+      valid <- region_codes(regions)
       if (length(valid) > 0 && !region_arg %in% valid) {
-        stop("--region must be a valid region from config (e.g. PHI_CagayandeOroCity, PHI_DavaoCity, KEN_Nairobi, KEN_Mombasa, MEX, PRT)")
+        stop("--region must be a valid region from config (e.g. PHI_CagayandeOroCity, KEN_Nairobi, MEX, IDN, LKA, COL, ECU, ZAF)")
       }
     }
     i <- i + 2
@@ -88,6 +88,21 @@ while (i <= length(args)) {
     i <- i + 1
   }
 }
+
+if (!is.null(region_arg) && nzchar(region_arg)) {
+  out_dir <- figure_dir(region_arg, "01")
+} else {
+  inf <- region_from_artifact_path(input_path)
+  if (!is.null(inf)) out_dir <- figure_dir(inf, "01")
+}
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+output_data_overview_raw <- file.path(out_dir, "01_data_overview_raw.png")
+output_data_overview_log1p <- file.path(out_dir, "01_data_overview_log1p.png")
+output_share_maps <- file.path(out_dir, "01_share_maps.png")
+output_data_overview_clip_raw <- file.path(out_dir, "01_data_overview_clip_raw.png")
+output_data_overview_clip_log1p <- file.path(out_dir, "01_data_overview_clip_log1p.png")
+output_bivariate <- file.path(out_dir, "01_bivariate_worldpop_meta.png")
+output_bivariate_basemap <- file.path(out_dir, "01_bivariate_worldpop_meta_basemap.png")
 
 if (!file.exists(input_path)) {
   stop("Run script 01 first. Missing: ", input_path)
@@ -164,12 +179,13 @@ p_wp <- ggplot(gdf_plot) +
 p_wp <- add_coord(p_wp)
 
 has_poverty <- "poverty_mean" %in% names(gdf)
+pov_can_log <- has_poverty && all(gdf_plot$poverty_mean >= 0, na.rm = TRUE)
 if (has_poverty) {
   p_pov <- ggplot(gdf_plot) +
     geom_sf(aes(fill = poverty_mean), color = "white", linewidth = 0.12) +
-    scale_fill_viridis_c(option = "viridis", na.value = "grey95", name = "MPI proportion",
-      limits = c(0, NA), guide = guide_horizontal) +
-    labs(title = "Poverty (MPI mean)") +
+    scale_fill_viridis_c(option = "viridis", na.value = "grey95", name = "Deprivation",
+      guide = guide_horizontal) +
+    labs(title = "Deprivation (higher = poorer)") +
     theme_map()
   p_pov <- add_coord(p_pov)
   row1 <- p_meta + p_wp + p_pov
@@ -184,7 +200,7 @@ gdf_log <- gdf_plot %>%
   mutate(
     meta_log = log1p(meta_baseline),
     worldpop_log = log1p(worldpop_count),
-    poverty_log = if (has_poverty) log1p(poverty_mean) else NA_real_
+    poverty_log = if (has_poverty && pov_can_log) log1p(poverty_mean) else NA_real_
   )
 
 p_meta_log <- ggplot(gdf_log) +
@@ -203,12 +219,22 @@ p_wp_log <- ggplot(gdf_log) +
   theme_map()
 p_wp_log <- add_coord(p_wp_log)
 
-if (has_poverty) {
+if (has_poverty && pov_can_log) {
   p_pov_log <- ggplot(gdf_log) +
     geom_sf(aes(fill = poverty_log), color = "white", linewidth = 0.12) +
-    scale_fill_viridis_c(option = "viridis", na.value = "grey95", name = "log1p(MPI proportion)",
+    scale_fill_viridis_c(option = "viridis", na.value = "grey95", name = "log1p(deprivation)",
       guide = guide_horizontal) +
-    labs(title = "Poverty (log1p)") +
+    labs(title = "Deprivation (log1p)") +
+    theme_map()
+  p_pov_log <- add_coord(p_pov_log)
+  row2 <- p_meta_log + p_wp_log + p_pov_log
+} else if (has_poverty) {
+  # RWI-derived poverty_mean can be negative; plot native scale instead of log1p.
+  p_pov_log <- ggplot(gdf_plot) +
+    geom_sf(aes(fill = poverty_mean), color = "white", linewidth = 0.12) +
+    scale_fill_viridis_c(option = "viridis", na.value = "grey95", name = "Deprivation",
+      guide = guide_horizontal) +
+    labs(title = "Deprivation (higher = poorer)") +
     theme_map()
   p_pov_log <- add_coord(p_pov_log)
   row2 <- p_meta_log + p_wp_log + p_pov_log
@@ -418,38 +444,40 @@ if (!skip_basemap && is.null(basemap_layer) && use_ggspatial) {
   }, error = function(e) NULL)
 }
 if (!skip_basemap && use_ggspatial && !is.null(basemap_layer)) {
-  if (use_biscale && use_cowplot) {
-    map_bm <- ggplot(gdf_bi) +
-      basemap_layer +
-      geom_sf(aes(fill = bi_class), color = "white", linewidth = 0.3, alpha = 0.5, show.legend = FALSE) +
-      biscale::bi_scale_fill(pal = "DkBlue", dim = 3) +
-      biscale::bi_theme() +
-      labs(title = paste0("Bivariate: WorldPop vs Meta", basemap_title_add), subtitle = sprintf("Threshold ±%.1f", threshold))
-    map_bm <- add_coord(map_bm)
-    legend_bm <- biscale::bi_legend(pal = "DkBlue", dim = 3, xlab = "Higher WorldPop ", ylab = "Higher Meta ", size = 10)
-    p_bm <- cowplot::ggdraw() +
-      cowplot::draw_plot(map_bm, 0, 0, 1, 1) +
-      cowplot::draw_plot(legend_bm, 0.05, 0.02, 0.28, 0.28)
-  } else {
-    map_bm <- ggplot(gdf_bi) +
-      basemap_layer +
-      geom_sf(aes(fill = bi_class), color = "white", linewidth = 0.3, alpha = 0.5) +
-      scale_fill_manual(values = bivariate_palette, na.value = "grey90", drop = FALSE,
-        name = sprintf("Z-score (t=±%.1f)\nWorldPop | Meta", threshold)) +
-      theme_void() +
-      theme(legend.position = c(0.02, 0.02), legend.justification = c(0, 0),
-        legend.title = element_text(size = 10, face = "bold"),
-        legend.text = element_text(size = 9),
-        plot.title = element_text(hjust = 0.5, face = "bold")) +
-      labs(title = paste0("Bivariate: WorldPop vs Meta", basemap_title_add), subtitle = sprintf("Threshold ±%.1f", threshold))
-    p_bm <- add_coord(map_bm)
-  }
+  # OSM tiles are fetched when the grob is built (cowplot::draw_plot / ggsave),
+  # not when annotation_map_tile() is called. Failed tiles must not halt the pipeline.
   tryCatch({
+    if (use_biscale && use_cowplot) {
+      map_bm <- ggplot(gdf_bi) +
+        basemap_layer +
+        geom_sf(aes(fill = bi_class), color = "white", linewidth = 0.3, alpha = 0.5, show.legend = FALSE) +
+        biscale::bi_scale_fill(pal = "DkBlue", dim = 3) +
+        biscale::bi_theme() +
+        labs(title = paste0("Bivariate: WorldPop vs Meta", basemap_title_add), subtitle = sprintf("Threshold ±%.1f", threshold))
+      map_bm <- add_coord(map_bm)
+      legend_bm <- biscale::bi_legend(pal = "DkBlue", dim = 3, xlab = "Higher WorldPop ", ylab = "Higher Meta ", size = 10)
+      p_bm <- cowplot::ggdraw() +
+        cowplot::draw_plot(map_bm, 0, 0, 1, 1) +
+        cowplot::draw_plot(legend_bm, 0.05, 0.02, 0.28, 0.28)
+    } else {
+      map_bm <- ggplot(gdf_bi) +
+        basemap_layer +
+        geom_sf(aes(fill = bi_class), color = "white", linewidth = 0.3, alpha = 0.5) +
+        scale_fill_manual(values = bivariate_palette, na.value = "grey90", drop = FALSE,
+          name = sprintf("Z-score (t=±%.1f)\nWorldPop | Meta", threshold)) +
+        theme_void() +
+        theme(legend.position = c(0.02, 0.02), legend.justification = c(0, 0),
+          legend.title = element_text(size = 10, face = "bold"),
+          legend.text = element_text(size = 9),
+          plot.title = element_text(hjust = 0.5, face = "bold")) +
+        labs(title = paste0("Bivariate: WorldPop vs Meta", basemap_title_add), subtitle = sprintf("Threshold ±%.1f", threshold))
+      p_bm <- add_coord(map_bm)
+    }
     ggsave(output_bivariate_basemap, p_bm, width = 10, height = 8, dpi = 150, bg = "white")
     message("Saved: ", output_bivariate_basemap)
   }, error = function(e) {
-    message("Basemap save failed (memory?): ", conditionMessage(e))
-    message("Skipping ", output_bivariate_basemap, " — try --no-basemap or lower zoom")
+    message("Basemap figure skipped (tile fetch failed): ", conditionMessage(e))
+    message("Non-basemap maps were already saved. Pass --no-basemap to skip this step.")
   })
 } else if (skip_basemap) {
   message("Skipping basemap (--no-basemap)")

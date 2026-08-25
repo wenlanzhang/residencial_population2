@@ -33,18 +33,30 @@ theme_nature <- function(base_size = 10, base_family = "sans") {
 }
 
 project_root <- "/Users/wenlanzhang/PycharmProjects/Residential_population2"
+script_dir <- file.path(project_root, "pipeline")
+source(file.path(script_dir, "region_config.R"), local = TRUE)
 in_dir <- file.path(project_root, "outputs", "03b_stratified")
 out_dir <- in_dir
-# Allow -i to override (for multi-region: -i outputs/PHI/03b_stratified)
+region_arg <- NULL
+o_arg <- NULL
 args <- commandArgs(trailingOnly = TRUE)
-for (i in seq_along(args)) {
+i <- 1
+while (i <= length(args)) {
   if (args[i] == "-i" && i < length(args)) {
     in_dir <- args[i + 1]
-    out_dir <- if (dir.exists(in_dir)) in_dir else dirname(in_dir)
     in_dir <- if (dir.exists(in_dir)) in_dir else dirname(in_dir)
-    break
+    i <- i + 2
+  } else if (args[i] == "-o" && i < length(args)) {
+    o_arg <- args[i + 1]
+    i <- i + 2
+  } else if (args[i] == "--region" && i < length(args)) {
+    region_arg <- args[i + 1]
+    i <- i + 2
+  } else {
+    i <- i + 1
   }
 }
+out_dir <- resolve_plot_out_dir(region_arg, in_dir, "03b_stratified", o_arg)
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 # 1. Marginal effects (poverty × residual at median density)
@@ -52,11 +64,11 @@ marg_path <- file.path(in_dir, "03b_marginal_effects_for_plots.csv")
 if (file.exists(marg_path)) {
   marg <- read.csv(marg_path)
   p_marg <- ggplot(marg, aes(x = poverty, y = pred)) +
-    geom_ribbon(aes(ymin = ci_lo, ymax = ci_hi), fill = "#4A90A4", alpha = 0.25) +
+    geom_ribbon(aes(ymin = ci_lo, ymax = ci_hi), fill = "#798234", alpha = 0.25) +
     geom_line(colour = "#2C3E50", linewidth = 1) +
     geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40", linewidth = 0.4) +
     labs(
-      x = "Poverty (MPI proportion)",
+      x = "Deprivation (higher = poorer)",
       y = "Predicted residual",
       title = "Marginal effect of poverty on allocation residual",
       subtitle = "At median population density (95% CI)"
@@ -78,7 +90,7 @@ if (file.exists(strata_path)) {
   p_box <- ggplot(strata, aes(x = poverty_strata, y = .data[[resid_col]], fill = poverty_strata)) +
     geom_boxplot(outlier.size = 1, outlier.alpha = 0.5) +
     geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40", linewidth = 0.4) +
-    scale_fill_manual(values = c("#5D8A66", "#4A90A4", "#C75D4E"), guide = "none") +
+    scale_fill_manual(values = c("#9aab6a", "#798234", "#D46780"), guide = "none") +
     labs(
       x = "Poverty stratum",
       y = "Allocation residual: log(meta_share / worldpop_share)",
@@ -105,7 +117,7 @@ if (file.exists(gini_path)) {
     tidyr::pivot_longer(cols = c(WorldPop, Meta), names_to = "Source", values_to = "Gini")
   p_gini <- ggplot(gini_long, aes(x = quintile, y = Gini, fill = Source)) +
     geom_col(position = position_dodge(width = 0.8), width = 0.7) +
-    scale_fill_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+    scale_fill_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
     labs(
       x = "Poverty quintile",
       y = "Gini coefficient",

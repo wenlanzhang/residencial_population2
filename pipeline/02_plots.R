@@ -3,8 +3,8 @@
 #
 # Reads: outputs/02/harmonised_with_residual.gpkg
 # Outputs: 02_density_histogram_r.png, 02_density_histogram_overlapped_r.png,
-#          02_density_cdf_ks_r.png, 02_scatter_meta_vs_worldpop_r.png,
-#          etc. (_r suffix to avoid overwriting Python figures)
+#          02_density_cdf_ks_r.png, 02_scatter_meta_vs_worldpop_r.png, …
+#          (_r suffix is historical; Python 02 no longer writes draft PNGs)
 #
 # Usage: Rscript pipeline/02_plots.R
 
@@ -48,14 +48,17 @@ script_dir <- file.path(project_root, "pipeline")
 source(file.path(script_dir, "region_config.R"), local = TRUE)
 
 in_path <- file.path(project_root, "outputs", "02", "harmonised_with_residual.gpkg")
-out_dir <- file.path(project_root, "outputs", "02")
+out_dir <- file.path(project_root, "figure", "02")
 region_arg <- NULL
+o_arg <- NULL
 args <- commandArgs(trailingOnly = TRUE)
 i <- 1
 while (i <= length(args)) {
   if (args[i] == "-i" && i < length(args)) {
     in_path <- args[i + 1]
-    out_dir <- dirname(in_path)
+    i <- i + 2
+  } else if (args[i] == "-o" && i < length(args)) {
+    o_arg <- args[i + 1]
     i <- i + 2
   } else if (args[i] == "--region" && i < length(args)) {
     region_arg <- args[i + 1]
@@ -64,6 +67,7 @@ while (i <= length(args)) {
     i <- i + 1
   }
 }
+out_dir <- resolve_plot_out_dir(region_arg, in_path, "02", o_arg)
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 if (!file.exists(in_path)) {
@@ -117,7 +121,7 @@ if (use_log) df_dens <- df_dens %>% mutate(density = log10(density + 1))
 
 p1 <- ggplot(df_dens, aes(x = density, fill = source)) +
   geom_histogram(aes(y = after_stat(density)), bins = 40, alpha = 0.7, position = "identity") +
-  scale_fill_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+  scale_fill_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
   labs(
     x = if (use_log) "log₁₀(density + 1) [per km²]" else "Population density [per km²]",
     y = "Density",
@@ -137,8 +141,8 @@ df_dens2 <- bind_rows(
 p2 <- ggplot(df_dens2, aes(x = x, fill = source)) +
   geom_histogram(aes(y = after_stat(density)), bins = 40, alpha = 0.6, position = "identity") +
   geom_density(aes(colour = source), linewidth = 0.8, fill = NA) +
-  scale_fill_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
-  scale_colour_manual(values = c(WorldPop = "#2C3E50", Meta = "#8B3A3A"), guide = "none") +
+  scale_fill_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
+  scale_colour_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), guide = "none") +
   labs(
     x = if (use_log) "log₁₀(density + 1) [per km²]" else "Population density [per km²]",
     y = "Density",
@@ -158,7 +162,7 @@ p3 <- ggplot(df_scatter, aes(x = log_meta, y = log_wp)) +
   geom_hex(bins = 25) +
   scale_fill_gradient(low = "#E8F4F8", high = "#2166AC", name = "Count") +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey30", linewidth = 0.6) +
-  geom_abline(slope = slope, intercept = coef(fit)[1], colour = "#C75D4E", linewidth = 0.8) +
+  geom_abline(slope = slope, intercept = coef(fit)[1], colour = "#D46780", linewidth = 0.8) +
   annotate("label", x = min(log_meta, na.rm = TRUE), y = max(log_wp, na.rm = TRUE),
            label = sprintf("Slope = %.3f\nPearson r = %.3f", slope, r_pearson),
            hjust = 0, vjust = 1, fill = "white", alpha = 0.9) +
@@ -181,12 +185,12 @@ df_dist <- bind_rows(
 )
 p4a <- ggplot(df_dist, aes(x = value, fill = source)) +
   geom_histogram(aes(y = after_stat(density)), bins = 30, alpha = 0.7, position = "identity") +
-  scale_fill_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+  scale_fill_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
   labs(x = "Normalized value", y = "Density", title = "Histograms (normalized)") +
   theme_nature()
 p4b <- ggplot(df_dist, aes(x = value, colour = source)) +
   geom_density(linewidth = 0.8) +
-  scale_colour_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+  scale_colour_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
   labs(x = "Normalized value", y = "Density", title = "Kernel density") +
   theme_nature()
 if (requireNamespace("patchwork", quietly = TRUE)) {
@@ -209,7 +213,7 @@ df_lorenz <- bind_rows(
 p5 <- ggplot(df_lorenz, aes(x = pop, y = val, colour = source)) +
   geom_line(linewidth = 0.8) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40", linewidth = 0.4) +
-  scale_colour_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+  scale_colour_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
   coord_fixed(xlim = c(0, 1), ylim = c(0, 1)) +
   labs(
     x = "Cumulative share of quadkeys",
@@ -220,19 +224,16 @@ p5 <- ggplot(df_lorenz, aes(x = pop, y = val, colour = source)) +
 ggsave(file.path(out_dir, "02_lorenz_curves_r.png"), p5, width = 6, height = 6, dpi = 300, bg = "white")
 message("Saved: 02_lorenz_curves_r.png")
 
-# 6. Allocation residual map (zoomed when Philippines)
-resid_col <- if ("allocation_residual" %in% names(gdf)) "allocation_residual" else "allocation_log_ratio"
-if (resid_col %in% names(gdf)) {
-  v <- gdf_plot[[resid_col]]
-  lim <- max(abs(min(v, na.rm = TRUE)), abs(max(v, na.rm = TRUE)), 1e-6)
-  p6 <- ggplot(gdf_plot) +
-    geom_sf(aes(fill = .data[[resid_col]]), colour = "white", linewidth = 0.15) +
-    scale_fill_gradient2(low = "#2166AC", mid = "white", high = "#B2182B", midpoint = 0,
-                         limits = c(-lim, lim), name = "Residual") +
-    labs(title = "Allocation residual: log(meta_share / worldpop_share)") +
-    theme_nature_map()
-  p6 <- add_coord(p6, gdf)
-  ggsave(file.path(out_dir, "02_allocation_log_ratio_r.png"), p6, width = 8, height = 8, dpi = 300, bg = "white")
+# 6. Allocation residual map (same style as cross-city Figure 3)
+gdf_resid <- clip_gdf_to_bbox(gdf, map_bbox)
+city_title <- if (!is.null(region_arg) && nzchar(region_arg)) {
+  city_display_label(region_arg)
+} else {
+  "Allocation residual"
+}
+p6 <- plot_allocation_residual_map(gdf_resid, title = city_title)
+if (!is.null(p6)) {
+  ggsave(file.path(out_dir, "02_allocation_log_ratio_r.png"), p6, width = 6, height = 5, dpi = 300, bg = "white")
   message("Saved: 02_allocation_log_ratio_r.png")
 }
 
@@ -341,7 +342,7 @@ df_cc_log <- bind_rows(
 df_cc <- bind_rows(df_cc_lin, df_cc_log)
 p11 <- ggplot(df_cc, aes(x = x, y = y, colour = source)) +
   geom_line(linewidth = 0.8) +
-  scale_colour_manual(values = c(WorldPop = "#4A90A4", Meta = "#C75D4E"), name = "Source") +
+  scale_colour_manual(values = c(WorldPop = "#798234", Meta = "#D46780"), name = "Source") +
   facet_wrap(~panel, scales = "free_x", ncol = 2) +
   labs(
     x = "Population density",

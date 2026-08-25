@@ -22,6 +22,7 @@ from scipy.stats import linregress
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import poverty_utils  # your helper that loads & prepares the gdf
+import region_config
 
 DEFAULT_INPUT = PROJECT_ROOT / "outputs" / "02" / "harmonised_with_residual.gpkg"
 OUT_SUBDIR = "03a_regression"
@@ -47,6 +48,7 @@ def parse_args():
     p = argparse.ArgumentParser(description="03a — Regression + diagnostics")
     p.add_argument("-i", "--input", type=Path, default=DEFAULT_INPUT, help="02_harmonised_with_residual.gpkg")
     p.add_argument("-o", "--output-dir", type=Path, default=PROJECT_ROOT / "outputs", help="outputs root")
+    p.add_argument("--region", type=str, default=None, help="Region code; splits CSV / figure / GPKG paths")
     p.add_argument("--project-crs", type=str, default="EPSG:32737", help="CRS for distances (default UTM 37S)")
     p.add_argument("--residual-var", type=str, default="allocation_residual",
                    help="Which residual column to use as dependent variable.")
@@ -59,8 +61,9 @@ def main():
     if not args.input.exists():
         raise FileNotFoundError(f"Missing input: {args.input}. Run step 02 first.")
 
-    out_dir = args.output_dir / OUT_SUBDIR
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = region_config.resolve_step_paths(
+        getattr(args, "region", None), OUT_SUBDIR, args.output_dir, args.input
+    )
 
     import geopandas as gpd
     # quick check for requested column

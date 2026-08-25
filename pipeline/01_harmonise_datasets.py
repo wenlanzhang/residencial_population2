@@ -5,13 +5,17 @@ Step 1 — Harmonise all rasters to the quadkey grid.
 Aggregates to the exact Meta quadkey grid:
   - WorldPop (zonal sum)
   - Meta baseline (already in quadkeys)
-  - Poverty (zonal mean, optional via --poverty)
+  - Poverty (zonal mean). Default source is GRDI (GeoTIFF); Meta RWI CSV is optional.
 
 Usage:
   python pipeline/01_harmonise_datasets.py --worldpop /path/to.tif --meta /path/to.gpkg
+  python pipeline/01_harmonise_datasets.py --region KEN_Nairobi
+  python pipeline/01_harmonise_datasets.py --region KEN_Nairobi --poverty-source rwi
   python pipeline/01_harmonise_datasets.py --worldpop ... --meta ... --poverty /path/to/poverty.tif
   python pipeline/01_harmonise_datasets.py --filter-by meta --filter-min 50   # keep quadkeys with meta_baseline > 50
   python pipeline/01_harmonise_datasets.py --filter-by worldpop --filter-min 50   # keep quadkeys with worldpop_count > 50
+  python pipeline/01_harmonise_datasets.py --region KEN_Nairobi --clip-source osm
+  python pipeline/01_harmonise_datasets.py --region KEN_Nairobi --clip-source geob
   python pipeline/01_harmonise_datasets.py --filter-by both --filter-min 50   # keep quadkeys where BOTH meta and worldpop >= 50
 """
 
@@ -23,8 +27,10 @@ import multiprocessing
 import sys
 from pathlib import Path
 
-# Allow importing region_config from pipeline/
+# Allow importing region_config / clip_utils from pipeline/
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import clip_utils
 
 import pandas as pd
 import geopandas as gpd
@@ -38,10 +44,10 @@ except ImportError:
 
 # Default paths (used when --region not set)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_BASE = PROJECT_ROOT / "data"  # WorldPop, Poverty rasters; put files here or override with CLI
-DEFAULT_WORLDPOP = Path("/Users/wenlanzhang/Downloads/PhD_UCL/Data/Residential_population/worldpop/phl_pop_2026_CN_100m_R2025A_v1.tif")
+DEFAULT_BASE = PROJECT_ROOT / "data" / "raw"  # WorldPop, Poverty rasters; put files here or override with CLI
+DEFAULT_WORLDPOP = PROJECT_ROOT / "data" / "raw" / "worldpop" / "phl_pop_2026_CN_100m_R2025A_v1.tif"
 DEFAULT_META = PROJECT_ROOT / "outputs" / "fb_baseline_median_PHI.gpkg"  # from build_fb_baseline_median.py
-DEFAULT_POVERTY = Path("/Users/wenlanzhang/Downloads/PhD_UCL/Data/Meta/RWI/philippine_relative_wealth_index.csv")
+DEFAULT_POVERTY = PROJECT_ROOT / "data" / "raw" / "povmap-grdi-v1-10.tif"
 
 
 def filter_quadkeys(gdf, by=None, min_val=50):
@@ -77,6 +83,14 @@ def parse_args():
     p.add_argument("--worldpop", type=Path, default=None, help="Override: WorldPop raster path")
     p.add_argument("--meta", type=Path, default=None, help="Override: Meta baseline GPKG path")
     p.add_argument("--poverty", type=Path, default=None, help="Override: Poverty raster or RWI CSV path")
+    p.add_argument(
+        "--poverty-source",
+        type=str,
+        default=None,
+        choices=["grdi", "rwi"],
+        help="Poverty layer: grdi (default, global GeoTIFF) or rwi (per-region Meta RWI CSV). "
+             "Ignored when --poverty is set, except to label the source.",
+    )
     p.add_argument("--no-poverty", action="store_true", help="Skip poverty aggregation")
     p.add_argument("--poverty-nodata", type=float, default=None)
     p.add_argument("-o", "--output", type=Path, default=None)
@@ -89,7 +103,25 @@ def parse_args():
     p.add_argument("--workers", type=int, default=1,
                    help="Parallel workers for zonal_stats (default: 1). Use 4+ for large grids.")
     p.add_argument("--clip-shape", type=Path, default=None,
-                   help="Clip to study area: path to .shp, .gpkg, or .geojson. Overrides config clip_shape.")
+                   help="Clip to study area: path to .shp, .gpkg, or .geojson. Used when --clip-source local.")
+    p.add_argument(
+        "--clip-source",
+        type=str,
+        default=None,
+        choices=["local", "osm", "geob"],
+        help="City boundary: local (config clip_shape), osm (OSMnx/Nominatim), "
+             "or geob (geoBoundaries). Default: local.",
+    )
+    p.add_argument("--clip-osm-place", type=str, default=None,
+                   help="OSM/Nominatim place query when --clip-source osm (overrides config).")
+    p.add_argument("--clip-geob-iso3", type=str, default=None,
+                   help="geoBoundaries ISO3 code when --clip-source geob (e.g. KEN).")
+    p.add_argument("--clip-geob-adm", type=str, default=None,
+                   help="geoBoundaries ADM level when --clip-source geob (e.g. ADM1, ADM3).")
+    p.add_argument("--clip-geob-name", type=str, default=None,
+                   help="geoBoundaries feature name to keep (e.g. Nairobi).")
+    p.add_argument("--clip-refresh", action="store_true",
+                   help="Re-download OSM/geoBoundaries even if a cache file exists.")
     return p.parse_args()
 
 
@@ -104,19 +136,68 @@ def main():
         if args.meta is not None:
             meta_path = args.meta
         elif args.ref_hour is not None:
-            meta_path = PROJECT_ROOT / "outputs" / args.region / f"fb_baseline_median_h{args.ref_hour:02d}.gpkg"
+            meta_path = region_config.baseline_path(args.region, args.ref_hour)
         else:
             meta_path = cfg["meta"]
-        poverty_path = args.poverty if args.poverty is not None else (None if args.no_poverty else cfg.get("poverty"))
-        clip_shape_path = args.clip_shape or cfg.get("clip_shape")
-        out_dir = region_config.get_output_dir(args.region, "01")
+        if args.no_poverty:
+            poverty_path = None
+            poverty_source = None
+        elif args.poverty is not None:
+            poverty_path = args.poverty
+            poverty_source = args.poverty_source or (
+                "rwi" if Path(poverty_path).suffix.lower() == ".csv" else "grdi"
+            )
+        else:
+            poverty_source = args.poverty_source or cfg.get("poverty_source") or "grdi"
+            poverty_path = region_config.resolve_poverty_path(cfg, poverty_source)
+        if args.clip_shape is not None:
+            cfg["clip_shape"] = args.clip_shape
+        if args.clip_osm_place:
+            cfg["clip_osm_place"] = args.clip_osm_place
+        if args.clip_geob_iso3:
+            cfg["clip_geob_iso3"] = args.clip_geob_iso3
+        if args.clip_geob_adm:
+            cfg["clip_geob_adm"] = args.clip_geob_adm
+        if args.clip_geob_name:
+            cfg["clip_geob_name"] = args.clip_geob_name
+        clip_source = args.clip_source or cfg.get("clip_source") or "local"
+        cfg["clip_source"] = clip_source
+        out_dir = region_config.step_paths(args.region, "01")
         print(f"Region: {args.region} ({cfg.get('name', args.region)})")
+        if not args.no_poverty:
+            print(f"Poverty source: {poverty_source} → {poverty_path}")
+        print(f"Clip source: {clip_source}")
     else:
         worldpop = args.worldpop or DEFAULT_WORLDPOP
         meta_path = args.meta or DEFAULT_META
-        poverty_path = None if args.no_poverty else (args.poverty or DEFAULT_POVERTY)
-        clip_shape_path = args.clip_shape
+        if args.no_poverty:
+            poverty_path = None
+            poverty_source = None
+        elif args.poverty is not None:
+            poverty_path = args.poverty
+            poverty_source = args.poverty_source or (
+                "rwi" if Path(poverty_path).suffix.lower() == ".csv" else "grdi"
+            )
+        else:
+            poverty_source = args.poverty_source or "grdi"
+            if poverty_source == "rwi":
+                raise FileNotFoundError(
+                    "--poverty-source rwi requires --poverty PATH or --region (per-city RWI CSV in config)."
+                )
+            poverty_path = DEFAULT_POVERTY
+        cfg = {
+            "clip_shape": args.clip_shape,
+            "clip_osm_place": args.clip_osm_place,
+            "clip_geob_iso3": args.clip_geob_iso3,
+            "clip_geob_adm": args.clip_geob_adm,
+            "clip_geob_name": args.clip_geob_name,
+            "clip_source": args.clip_source or "local",
+        }
+        clip_source = cfg["clip_source"]
         out_dir = PROJECT_ROOT / "outputs" / "01"
+        if not args.no_poverty:
+            print(f"Poverty source: {poverty_source} → {poverty_path}")
+        print(f"Clip source: {clip_source}")
 
     out_gpkg = args.output or (out_dir / "harmonised_meta_worldpop.gpkg")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -145,11 +226,11 @@ def main():
             )
             raise FileNotFoundError(msg)
 
-    # Validate clip_shape if configured
-    if clip_shape_path is not None:
-        clip_p = Path(clip_shape_path)
+    # Validate clip_shape only for local files; OSM/geoBoundaries are fetched later
+    if clip_source == "local" and cfg.get("clip_shape") is not None:
+        clip_p = Path(cfg["clip_shape"])
         if not clip_p.exists():
-            raise FileNotFoundError(f"Clip shape not found: {clip_shape_path}")
+            raise FileNotFoundError(f"Clip shape not found: {cfg['clip_shape']}")
 
     # -------------------------------------------------------------------------
     # 1. Load data
@@ -167,16 +248,29 @@ def main():
         print("  Meta reprojected to EPSG:4326")
 
     # -------------------------------------------------------------------------
-    # 2b. Clip to study area (city/region boundary) if clip_shape configured
+    # 2b. Clip to study area (city/region boundary)
     # -------------------------------------------------------------------------
-    if clip_shape_path is not None:
-        clip_gdf = gpd.read_file(clip_shape_path)
+    clip_gdf = clip_utils.load_clip_boundary(
+        cfg,
+        source=clip_source,
+        region_code=args.region,
+        refresh=args.clip_refresh,
+    )
+    if clip_gdf is not None:
         if clip_gdf.crs != meta.crs:
             clip_gdf = clip_gdf.to_crs(meta.crs)
-        clip_union = clip_gdf.geometry.unary_union
+        clip_union = clip_utils.unary_geom(clip_gdf)
         before = len(meta)
         meta = meta[meta.geometry.intersects(clip_union)].copy()
-        print(f"  Clipped to study area: kept {len(meta)} / {before} quadkeys")
+        print(f"  Clipped to study area ({clip_source}): kept {len(meta)} / {before} quadkeys")
+        clip_save = gpd.GeoDataFrame(
+            {"clip_source": [clip_source]},
+            geometry=[clip_union],
+            crs=clip_gdf.crs,
+        )
+        clip_out = out_dir / "clip_boundary.gpkg"
+        clip_save.to_file(clip_out, driver="GPKG")
+        print(f"  Saved clip polygon: {clip_out}")
 
     # WorldPop is already EPSG:4326; rasterstats will handle CRS alignment
     # when zones are in same CRS as raster
@@ -294,7 +388,7 @@ def main():
                 mercantile.quadkey(mercantile.tile(lon, lat, zoom))
                 for lon, lat in zip(lons, lats)
             ]
-            # RWI: higher = wealthier. Negate so poverty_mean: higher = poorer (consistent with MPI)
+            # RWI: higher = wealthier. Negate so poverty_mean: higher = poorer (same direction as GRDI).
             rwi_by_qk = df_rwi.groupby("quadkey")["rwi"].mean().reset_index()
             rwi_by_qk["poverty_mean"] = -rwi_by_qk["rwi"]
             rwi_by_qk = rwi_by_qk[["quadkey", "poverty_mean"]]
@@ -302,9 +396,10 @@ def main():
             meta["poverty_n_pixels"] = meta["quadkey"].map(
                 df_rwi.groupby("quadkey").size().reindex(meta["quadkey"]).fillna(0).astype(int)
             )
+            poverty_source = poverty_source or "rwi"
             print(f"  RWI: mean per quadkey, valid cells: {(meta['poverty_mean'].notna()).sum()}")
         else:
-            # Raster (e.g. .tif)
+            # Raster (e.g. GRDI GeoTIFF): higher = more deprived; do not negate.
             print("\n--- Aggregating poverty raster to quadkeys ---")
             zs_kw = {"stats": ["mean", "count"], "all_touched": True}
             if args.poverty_nodata is not None:
@@ -312,7 +407,10 @@ def main():
             stats_pov = zonal_stats(meta.geometry, str(poverty_path), **zs_kw)
             meta["poverty_mean"] = [s["mean"] if s["mean"] is not None else np.nan for s in stats_pov]
             meta["poverty_n_pixels"] = [s["count"] if s["count"] is not None else 0 for s in stats_pov]
+            poverty_source = poverty_source or "grdi"
             print(f"  Poverty: mean per quadkey, valid cells: {(meta['poverty_n_pixels'] > 0).sum()}")
+        if poverty_source:
+            meta["poverty_source"] = poverty_source
     else:
         if poverty_path is not None:
             print("\n*** Poverty SKIPPED (file missing or placeholder) — output will NOT include poverty_mean ***")
