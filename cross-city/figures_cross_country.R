@@ -1,11 +1,12 @@
 #!/usr/bin/env Rscript
-# Cross-city figures for every selected city that has data.
+# Cross-country figures for every Meta-event footprint that has data.
 #
-# Tables are read from outputs/cross-city/.
-# Figures are written to figure/cross-city/.
+# Tables are read from outputs/cross-country/.
+# Figures are written to figure/cross-country/.
+# Residual maps are not produced (AOIs are too large for a combined panel).
 #
-# Usage: Rscript cross-city/figures_cross_city.R
-#        Rscript cross-city/figures_cross_city.R -o figure/cross-city/
+# Usage: Rscript cross-city/figures_cross_country.R
+#        Rscript cross-city/figures_cross_country.R -o figure/cross-country/
 
 suppressPackageStartupMessages({
   library(sf)
@@ -36,20 +37,20 @@ if (is.na(project_root) || !nzchar(project_root)) {
 
 source(file.path(project_root, "pipeline", "region_config.R"))
 
-tbl_dir <- file.path(project_root, "outputs", "cross-city")
+tbl_dir <- file.path(project_root, "outputs", "cross-country")
 fig_dir <- if (!is.na(fig_dir_arg) && nzchar(fig_dir_arg)) {
   if (grepl("^/", fig_dir_arg)) fig_dir_arg else file.path(project_root, fig_dir_arg)
 } else {
-  file.path(project_root, "figure", "cross-city")
+  file.path(project_root, "figure", "cross-country")
 }
 dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
 
 armyrose <- ARMYROSE
 
-tbl1_path <- file.path(tbl_dir, "Table1_cross_city_table.csv")
+tbl1_path <- file.path(tbl_dir, "Table1_cross_country_table.csv")
 tbl2_path <- file.path(tbl_dir, "Table2_poverty_effect_spatially_corrected.csv")
 if (!file.exists(tbl1_path)) {
-  stop("No ", tbl1_path, ". Run python cross-city/run_cross_city_table.py --aggregate-only first.")
+  stop("No ", tbl1_path, ". Run python cross-city/run_cross_country_table.py first.")
 }
 tbl1 <- read.csv(tbl1_path, check.names = FALSE)
 if (!("City" %in% names(tbl1))) stop("Table 1 needs a City column")
@@ -172,7 +173,7 @@ save_city_hbar <- function(df, filename, title, xlab, xmin, xmax) {
 fig1_plots <- list()
 for (city in names(city_to_reg)) {
   reg <- city_to_reg[[city]]
-  path <- find_artifact(reg, "02", "harmonised_with_residual.gpkg")
+  path <- find_footprint_artifact(reg, "02", "harmonised_with_residual.gpkg")
   if (is.null(path)) next
   gdf <- st_read(path, quiet = TRUE)
   df <- data.frame(wp = gdf$worldpop_share, meta = gdf$meta_share)
@@ -286,7 +287,7 @@ concentration_ratio_ci <- function(wp, meta, pct = 0.1, B = 1000, conf = 0.95, s
 # ---- Concentration ratio (95% bootstrap CI) ----
 fig1_data <- lapply(names(city_to_reg), function(city) {
   reg <- city_to_reg[[city]]
-  path <- find_artifact(reg, "02", "harmonised_with_residual.gpkg")
+  path <- find_footprint_artifact(reg, "02", "harmonised_with_residual.gpkg")
   if (is.null(path)) return(NULL)
   message("Bootstrap concentration ratio CI: ", city)
   gdf <- st_read(path, quiet = TRUE)
@@ -314,7 +315,7 @@ if (nrow(fig1_data) > 0) {
     geom_col(width = 0.7, alpha = 0.85) +
     geom_errorbar(aes(ymin = lo, ymax = hi), width = 0.18, linewidth = 0.45, colour = "grey25") +
     geom_hline(yintercept = 1, linetype = "dashed", linewidth = 0.6, colour = "gray30") +
-    geom_text(aes(y = hi, label = sprintf("%.2f", Ratio)), vjust = -0.45, size = 2.8, fontface = "bold") +
+    geom_text(aes(y = hi, label = sprintf("%.2f", Ratio)), vjust = -0.45, size = 3.2, fontface = "bold") +
     scale_fill_manual(values = fills, guide = "none") +
     scale_y_continuous(expand = expansion(mult = c(0.02, 0.16))) +
     coord_cartesian(ylim = c(0, y_top * 1.08), clip = "off") +
@@ -360,7 +361,7 @@ if (!is.na(dg_col) && dg_col %in% names(tbl1)) {
 fig2_plots <- list()
 for (city in names(city_to_reg)) {
   reg <- city_to_reg[[city]]
-  path <- find_artifact(reg, "02", "harmonised_with_residual.gpkg")
+  path <- find_footprint_artifact(reg, "02", "harmonised_with_residual.gpkg")
   if (is.null(path)) next
   gdf <- st_read(path, quiet = TRUE)
   wp <- gdf$worldpop_share
@@ -404,30 +405,13 @@ if (length(fig2_plots) > 0) {
   )
 }
 
-# ---- Residual maps (combined panel only; per-city maps live in figure/city/{COUNTRY}/{city}/02/) ----
-residual_maps <- list()
-for (city in names(city_to_reg)) {
-  path <- find_artifact(city_to_reg[[city]], "02", "harmonised_with_residual.gpkg")
-  if (is.null(path)) next
-  gdf <- st_read(path, quiet = TRUE)
-  p <- plot_allocation_residual_map(gdf, title = city)
-  if (!is.null(p)) residual_maps[[city]] <- p
-}
-if (length(residual_maps) > 0) {
-  save_wrapped(
-    residual_maps, "02_residual_maps.png",
-    ncol = min(4, length(residual_maps)), per_w = 4.2, per_h = 4.2,
-    title = "Allocation Residual Maps",
-    subtitle = "log(meta_share / worldpop_share)",
-    guides = "collect"
-  )
-}
+# Residual maps omitted for footprints (large AOIs; no combined 02_residual_maps.png).
 
-# ---- SEM forest (grouped by country; left panel of 03c_forest_scatter) ----
+# ---- SEM forest (one row per country; left panel of 03c_forest_scatter) ----
 p4 <- NULL
 fig4_data <- lapply(names(city_to_reg), function(city) {
   reg <- city_to_reg[[city]]
-  path <- find_artifact(reg, "03c_spatial_regression", "Table_tau_comparison.csv")
+  path <- find_footprint_artifact(reg, "03c_spatial_regression", "Table_tau_comparison.csv")
   if (is.null(path)) return(NULL)
   d <- read.csv(path)
   sem <- d[grepl("SEM", d$Model), ]
@@ -452,46 +436,30 @@ fig4_data <- lapply(names(city_to_reg), function(city) {
 fig4_data <- bind_rows(Filter(Negate(is.null), fig4_data))
 if (nrow(fig4_data) > 0) {
   fig4_data$sig <- !is.na(fig4_data$p) & fig4_data$p < 0.05
-  countries <- unique(fig4_data$Country)
   axis_rows <- list()
   city_rows <- list()
   y <- 0
-  first_group <- TRUE
-  for (country in countries) {
-    sub <- fig4_data[fig4_data$Country == country, , drop = FALSE]
-    if (nrow(sub) == 0) next
-    if (!first_group) y <- y - 0.22
-    first_group <- FALSE
-    axis_rows[[length(axis_rows) + 1]] <- data.frame(
+  for (i in seq_len(nrow(fig4_data))) {
+    row <- fig4_data[i, ]
+    p_txt <- if (is.na(row$p)) "" else if (row$p < 0.001) "p<0.001" else sprintf("p=%.3f", row$p)
+    city_rows[[length(city_rows) + 1]] <- data.frame(
       y = y,
-      Label = country,
-      label_color = sub$hex[[1]],
-      face = "bold",
+      tau = row$tau,
+      CI_lo = row$CI_lo,
+      CI_hi = row$CI_hi,
+      fill = if (row$sig) row$hex else "white",
+      edge = row$hex,
+      annot = sprintf("%.2f  %s", row$tau, p_txt),
       stringsAsFactors = FALSE
     )
-    y <- y - 0.58
-    for (i in seq_len(nrow(sub))) {
-      row <- sub[i, ]
-      p_txt <- if (is.na(row$p)) "" else if (row$p < 0.001) "p<0.001" else sprintf("p=%.3f", row$p)
-      city_rows[[length(city_rows) + 1]] <- data.frame(
-        y = y,
-        tau = row$tau,
-        CI_lo = row$CI_lo,
-        CI_hi = row$CI_hi,
-        fill = if (row$sig) row$hex else "white",
-        edge = row$hex,
-        annot = sprintf("%.2f  %s", row$tau, p_txt),
-        stringsAsFactors = FALSE
-      )
-      axis_rows[[length(axis_rows) + 1]] <- data.frame(
-        y = y,
-        Label = paste0("  ", city_n_label(row$City)),
-        label_color = "grey25",
-        face = "plain",
-        stringsAsFactors = FALSE
-      )
-      y <- y - 0.70
-    }
+    axis_rows[[length(axis_rows) + 1]] <- data.frame(
+      y = y,
+      Label = city_n_label(row$City),
+      label_color = row$hex,
+      face = "plain",
+      stringsAsFactors = FALSE
+    )
+    y <- y - 0.70
   }
   axis_df <- bind_rows(axis_rows)
   city_df <- bind_rows(city_rows)
@@ -547,7 +515,7 @@ if (nrow(fig4_data) > 0) {
       clip = "off"
     ) +
     labs(
-      title = "Poverty effect on Meta vs WorldPop allocation, by city",
+      title = "Poverty effect on Meta vs WorldPop allocation, by country",
       x = "SEM \u03c4  (high-poverty quartile vs rest), 95% CI",
       y = NULL
     ) +
@@ -571,13 +539,13 @@ if (nrow(fig4_data) > 0) {
     if (is.null(reg)) NA_character_ else as.character(reg)
   }, character(1)))
   tau_csv <- tau_csv[, c("Country", "City", "Region", "tau", "SE", "p", "CI_lo", "CI_hi", "exp_tau", "sig")]
-  tau_path <- file.path(tbl_dir, "Table_sem_tau_all_cities.csv")
+  tau_path <- file.path(tbl_dir, "Table_sem_tau_all_countries.csv")
   dir.create(tbl_dir, recursive = TRUE, showWarnings = FALSE)
   write.csv(tau_csv, tau_path, row.names = FALSE)
   message("Saved: ", tau_path)
 }
 
-# ---- Spearman ρ (cross-city bar) ----
+# ---- Spearman ρ (cross-country bar) ----
 sp_col <- names(tbl1)[grepl("Spearman", names(tbl1), ignore.case = TRUE)][1]
 if (length(sp_col) && sp_col %in% names(tbl1)) {
   sp <- data.frame(
@@ -595,7 +563,7 @@ if (length(sp_col) && sp_col %in% names(tbl1)) {
 }
 
 # ---- Hotspot Jaccard ----
-rank_path <- file.path(tbl_dir, "Table_rank_instability_cross_city.csv")
+rank_path <- file.path(tbl_dir, "Table_rank_instability_cross_country.csv")
 if (file.exists(rank_path)) {
   tr <- read.csv(rank_path, check.names = FALSE)
   jac_col <- names(tr)[grepl("jaccard_top_10", names(tr), ignore.case = TRUE)][1]
@@ -671,7 +639,7 @@ if (file.exists(tbl2_path)) {
         scale_colour_manual(values = fills, guide = "none") +
         scale_x_continuous(expand = expansion(mult = c(0.2, 0.35))) +
         labs(
-          title = "Cross-city: Delta Gini vs Poverty tau",
+          title = "Cross-country: Delta Gini vs Poverty tau",
           subtitle = "Structural concentration vs poverty treatment effect.",
           x = "Delta Gini (Meta - WP)", y = "SEM tau (poverty effect)"
         ) +
@@ -699,4 +667,4 @@ if (!is.null(p4) && !is.null(p5) && has_patchwork) {
   message("Saved: ", file.path(fig_dir, "03c_forest_scatter.png"))
 }
 
-message("\nCross-city figures saved to: ", fig_dir)
+message("\nCross-country figures saved to: ", fig_dir)

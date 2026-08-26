@@ -32,8 +32,8 @@ WorldPop file URL pattern:
 | [`raw/worldpop_log.csv`](raw/worldpop_log.csv) | Log of all PDC events and WorldPop rasters. `meta_event_id` is Meta’s crisis ID (same on every CSV in that extract; different events have different IDs). `year` is the WorldPop raster year; `worldpop_present` is yes/no for `data/raw/worldpop/`; `in_pipeline` is whether the region is already in `config/regions.json` |
 | `raw/ghsl/` | **GHS-SMOD** 2020 (R2023A, 30 arc-sec raster). Degree of Urbanisation: urban / suburban / rural per pixel. More relevant for stratifying quadkeys. [JRC download](https://human-settlement.emergency.copernicus.eu/download.php?ds=smod). Not in the main pipeline yet |
 | `raw/GHS_STAT_UCDB2015MT_GLOBE_R2019A/` | **GHS-UCDB** 2015 (R2019A v1.2). Urban Centre Database: one polygon per city (~13k centres), city-level attributes. Less relevant here (city list, not a within-city grid). [JRC dataset](http://data.europa.eu/89h/53473144-b88c-44bc-b4a3-4583ed1f547e). Not in the main pipeline |
-| `processed/` | Harmonised GPKGs from `./run` (`{COUNTRY}/{city\|full}/`) plus older aligned parquet files |
+| `processed/` | Harmonised GPKGs from `./run` (`city/{COUNTRY}/{city}/`) plus footprint aligned parquet under `processed/footprints/` |
 | `baselines/` | Meta baseline GPKGs built from PDC zips (`{COUNTRY}/fb_baseline_median_h{00\|08\|16}.gpkg`) |
 
 
-`data_root` is `/Users/wenlanzhang/Downloads/PhD_UCL/Data`. Change it in `config/regions.json` if the external data move.
+`data_root` is `/Users/wenlanzhang/Downloads/PhD_UCL/Data` in `config/regions.json`. Override with `RESIDENTIAL_DATA_ROOT` without editing the file.

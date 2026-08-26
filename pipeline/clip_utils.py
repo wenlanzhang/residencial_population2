@@ -34,7 +34,7 @@ NOMINATIM_SEARCH = "https://nominatim.openstreetmap.org/search"
 
 # Region-code prefix → ISO3 / default ADM level for geoBoundaries city units.
 _PREFIX_ISO3 = {
-    "PHI": "PHL",
+    "PHL": "PHL",
     "KEN": "KEN",
     "MEX": "MEX",
     "IDN": "IDN",
@@ -44,7 +44,7 @@ _PREFIX_ISO3 = {
     "ZAF": "ZAF",
 }
 _PREFIX_ADM = {
-    "PHI": "ADM3",
+    "PHL": "ADM3",
     "KEN": "ADM1",
     "MEX": "ADM1",
     "IDN": "ADM1",
@@ -54,7 +54,7 @@ _PREFIX_ADM = {
     "ZAF": "ADM1",
 }
 _PREFIX_COUNTRY = {
-    "PHI": "Philippines",
+    "PHL": "Philippines",
     "KEN": "Kenya",
     "MEX": "Mexico",
     "IDN": "Indonesia",

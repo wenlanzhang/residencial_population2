@@ -31,6 +31,7 @@ in_dir <- file.path(project_root, "outputs", "03c_spatial_regression")
 out_dir <- in_dir
 region_arg <- NULL
 o_arg <- NULL
+footprint_arg <- NULL
 args <- commandArgs(trailingOnly = TRUE)
 i <- 1
 while (i <= length(args)) {
@@ -44,11 +45,14 @@ while (i <= length(args)) {
   } else if (args[i] == "--region" && i < length(args)) {
     region_arg <- args[i + 1]
     i <- i + 2
+  } else if (args[i] == "--footprint" && i < length(args)) {
+    footprint_arg <- args[i + 1]
+    i <- i + 2
   } else {
     i <- i + 1
   }
 }
-out_dir <- resolve_plot_out_dir(region_arg, in_dir, "03c_spatial_regression", o_arg)
+out_dir <- resolve_plot_out_dir(region_arg, in_dir, "03c_spatial_regression", o_arg, footprint_arg)
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 gpkg_path <- file.path(in_dir, "03c_residuals_for_plots.gpkg")
@@ -58,7 +62,7 @@ if (!file.exists(gpkg_path)) {
 }
 
 gdf <- st_read(gpkg_path, quiet = TRUE)
-map_bbox <- get_map_bbox_for_plot(region_arg, in_dir, gdf)
+map_bbox <- get_map_bbox_for_plot(region_arg, in_dir, gdf, footprint_arg = footprint_arg)
 gdf_plot <- clip_gdf_to_bbox(gdf, map_bbox)
 coord_map <- coord_from_bbox(map_bbox)
 

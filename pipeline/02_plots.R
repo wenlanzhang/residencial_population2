@@ -51,6 +51,7 @@ in_path <- file.path(project_root, "outputs", "02", "harmonised_with_residual.gp
 out_dir <- file.path(project_root, "figure", "02")
 region_arg <- NULL
 o_arg <- NULL
+footprint_arg <- NULL
 args <- commandArgs(trailingOnly = TRUE)
 i <- 1
 while (i <= length(args)) {
@@ -63,11 +64,14 @@ while (i <= length(args)) {
   } else if (args[i] == "--region" && i < length(args)) {
     region_arg <- args[i + 1]
     i <- i + 2
+  } else if (args[i] == "--footprint" && i < length(args)) {
+    footprint_arg <- args[i + 1]
+    i <- i + 2
   } else {
     i <- i + 1
   }
 }
-out_dir <- resolve_plot_out_dir(region_arg, in_path, "02", o_arg)
+out_dir <- resolve_plot_out_dir(region_arg, in_path, "02", o_arg, footprint_arg)
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 if (!file.exists(in_path)) {
@@ -75,7 +79,7 @@ if (!file.exists(in_path)) {
 }
 
 gdf <- st_read(in_path, quiet = TRUE)
-map_bbox <- get_map_bbox_for_plot(region_arg, in_path, gdf)
+map_bbox <- get_map_bbox_for_plot(region_arg, in_path, gdf, footprint_arg = footprint_arg)
 gdf_plot <- clip_gdf_to_bbox(gdf, map_bbox)
 coord_map <- coord_from_bbox(map_bbox)
 add_coord <- function(p, g) p + coord_map
@@ -152,27 +156,38 @@ p2 <- ggplot(df_dens2, aes(x = x, fill = source)) +
 ggsave(file.path(out_dir, "02_density_histogram_overlapped_r.png"), p2, width = 8, height = 4, dpi = 300, bg = "white")
 message("Saved: 02_density_histogram_overlapped_r.png")
 
-# 3. Scatter: log(meta_share) vs log(worldpop_share)
+# 3. Scatter: same convention as cross-city/02_spatial_agreement.png
+#    x = log(WorldPop share) [reference], y = log(Meta share) [evaluated]
+#    Annotate Spearman ρ and Pearson r (not OLS slope — that is a different fit).
 df_scatter <- tibble(log_meta = log_meta, log_wp = log_wp)
-fit <- lm(log_wp ~ log_meta, data = df_scatter)
-slope <- coef(fit)[2]
 r_pearson <- cor(log_meta, log_wp)
 r_spearman <- cor(log_meta, log_wp, method = "spearman")
-p3 <- ggplot(df_scatter, aes(x = log_meta, y = log_wp)) +
-  geom_hex(bins = 25) +
-  scale_fill_gradient(low = "#E8F4F8", high = "#2166AC", name = "Count") +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey30", linewidth = 0.6) +
-  geom_abline(slope = slope, intercept = coef(fit)[1], colour = "#D46780", linewidth = 0.8) +
-  annotate("label", x = min(log_meta, na.rm = TRUE), y = max(log_wp, na.rm = TRUE),
-           label = sprintf("Slope = %.3f\nPearson r = %.3f", slope, r_pearson),
-           hjust = 0, vjust = 1, fill = "white", alpha = 0.9) +
-  coord_fixed(ratio = 0.75) +  # ratio < 1 makes plot area wider (more horizontal)
-  labs(
-    x = "log(meta_share)",
-    y = "log(worldpop_share)",
-    title = "Spatial agreement: log shares"
+lim <- range(c(df_scatter$log_wp, df_scatter$log_meta), na.rm = TRUE)
+lim <- lim + c(-0.05, 0.05) * diff(lim)
+p3 <- ggplot(df_scatter, aes(x = log_wp, y = log_meta)) +
+  geom_hex(bins = 25, alpha = 0.85) +
+  scale_fill_gradientn(colours = ARMYROSE[4:1], name = "count") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "gray40", linewidth = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, colour = ARMYROSE[7], fill = ARMYROSE[7],
+              alpha = 0.2, linewidth = 0.8) +
+  annotate(
+    "text", x = lim[1], y = lim[2],
+    label = paste0("atop(rho == ", round(r_spearman, 3), ", r == ", round(r_pearson, 3), ")"),
+    hjust = 0, vjust = 1, size = 4, colour = "gray30", parse = TRUE
   ) +
-  theme_nature()
+  coord_fixed(ratio = 1, xlim = lim, ylim = lim) +
+  labs(
+    x = expression(log(WorldPop~share)),
+    y = expression(log(Meta~share)),
+    title = "Spatial agreement (log-log scatter)",
+    subtitle = "rho = Spearman, r = Pearson (log shares). Dashed = 1:1; shaded = Meta ~ WorldPop."
+  ) +
+  theme_nature() +
+  theme(
+    legend.position = c(0.98, 0.02),
+    legend.justification = c(1, 0),
+    legend.background = element_rect(fill = "transparent", colour = NA)
+  )
 ggsave(file.path(out_dir, "02_scatter_meta_vs_worldpop_r.png"), p3, width = 7, height = 6, dpi = 300, bg = "white")
 message("Saved: 02_scatter_meta_vs_worldpop_r.png")
 

@@ -3,16 +3,14 @@
 Cross-city comparison: run steps 01, 02, 03c for selected cities, then aggregate.
 
 Default is every selected study city in config (same unit as ./run --region COUNTRY).
-Cities without outputs are skipped. Pass --include-full to add unclipped country extracts
-(outputs/{COUNTRY}/full) alongside the city rows.
+Cities without outputs are skipped.
 
 Tables → outputs/cross-city/. Figures → figure/cross-city/.
 
 Usage:
   python cross-city/run_cross_city_table.py
   python cross-city/run_cross_city_table.py --aggregate-only
-  python cross-city/run_cross_city_table.py --regions PHI,KEN,MEX
-  python cross-city/run_cross_city_table.py --include-full
+  python cross-city/run_cross_city_table.py --regions PHL,KEN,MEX
 """
 
 import argparse
@@ -30,7 +28,7 @@ SCRIPTS = PROJECT_ROOT / "pipeline"
 sys.path.insert(0, str(SCRIPTS))
 
 
-def get_regions(regions_arg=None, include_full=False):
+def get_regions(regions_arg=None):
     """Selected study cities (default). Country codes expand (MEX → all Mexico cities)."""
     import region_config
     if regions_arg:
@@ -38,23 +36,15 @@ def get_regions(regions_arg=None, include_full=False):
         result = []
         for r in requested:
             try:
-                expanded = region_config.expand_region_to_list(r, event=False)
+                expanded = region_config.expand_region_to_list(r)
             except ValueError:
                 expanded = []
-            if not expanded and r in region_config.list_regions():
+            if not expanded and r in region_config.list_cities():
                 expanded = [r]
             result.extend(expanded)
         codes = list(dict.fromkeys(result))
     else:
         codes = list(region_config.list_cities())
-    if include_full:
-        extras = region_config.list_event_regions()
-        if regions_arg:
-            prefixes = {region_config.country_prefix(c) for c in codes}
-            extras = [e for e in extras if e in prefixes]
-        for e in extras:
-            if e not in codes:
-                codes.append(e)
     return codes
 
 
@@ -102,19 +92,29 @@ def run_step_03c(region: str) -> bool:
     return result.returncode == 0
 
 
-def extract_metrics_from_region(region: str) -> dict | None:
+def extract_metrics_from_region(
+    region: str,
+    *,
+    finder=None,
+    include_city_area: bool = True,
+    city_label: str | None = None,
+) -> dict | None:
     """
     Extract comparison metrics from a region's 02 output.
     Reads Table1 and lorenz_headlines CSVs, or computes from harmonised_with_residual.gpkg.
     """
     import region_config
-    cfg = region_config.get_region_config(region)
-    city_label = region_config.display_label(region, cfg)
+    if finder is None:
+        finder = region_config.find_artifact
+    cfg = None
+    if city_label is None:
+        cfg = region_config.get_region_config(region)
+        city_label = region_config.display_label(region, cfg)
 
-    tbl1_path = region_config.find_artifact(region, "02", "Table1_meta_worldpop_metrics.csv")
-    lorenz_path = region_config.find_artifact(region, "02", "02_lorenz_headlines.csv")
-    gpkg_path = region_config.find_artifact(region, "02", "harmonised_with_residual.gpkg")
-    gpkg_01_path = region_config.find_artifact(region, "01", "harmonised_meta_worldpop.gpkg")
+    tbl1_path = finder(region, "02", "Table1_meta_worldpop_metrics.csv")
+    lorenz_path = finder(region, "02", "02_lorenz_headlines.csv")
+    gpkg_path = finder(region, "02", "harmonised_with_residual.gpkg")
+    gpkg_01_path = finder(region, "01", "harmonised_meta_worldpop.gpkg")
 
     if gpkg_path is None:
         return None
@@ -148,16 +148,21 @@ def extract_metrics_from_region(region: str) -> dict | None:
         )
     )
 
-    # Harmonised grid area as % of the city boundary used in step 01.
+    # Harmonised grid area as % of the city boundary used in step 01 (cities only).
     gdf_for_crs = gdf_all if has_01 else gdf_analysis
-    city_boundary_km2 = _city_boundary_area_km2(cfg, gdf_for_crs, region)
-    metrics.update(
-        _grid_area_pct_of_city(
-            metrics.get("Total_Area_km2"),
-            metrics.get("Valid_Area_km2"),
-            city_boundary_km2,
+    if include_city_area:
+        if cfg is None:
+            cfg = region_config.get_region_config(region)
+        city_boundary_km2 = _city_boundary_area_km2(cfg, gdf_for_crs, region)
+        metrics.update(
+            _grid_area_pct_of_city(
+                metrics.get("Total_Area_km2"),
+                metrics.get("Valid_Area_km2"),
+                city_boundary_km2,
+            )
         )
-    )
+    else:
+        metrics.update(_grid_area_pct_of_city(None, None, None))
 
     gdf = gdf_analysis  # downstream metrics read from analysis grid
 
@@ -235,11 +240,18 @@ def extract_metrics_from_region(region: str) -> dict | None:
     return metrics
 
 
-def extract_rank_instability_from_region(region: str) -> dict | None:
+def extract_rank_instability_from_region(
+    region: str,
+    *,
+    finder=None,
+    city_label: str | None = None,
+) -> dict | None:
     """Load Table_rank_instability.csv from 03b_stratified when present."""
     import region_config
 
-    path = region_config.find_artifact(region, "03b_stratified", "Table_rank_instability.csv")
+    if finder is None:
+        finder = region_config.find_artifact
+    path = finder(region, "03b_stratified", "Table_rank_instability.csv")
     if path is None:
         return None
     df = pd.read_csv(path)
@@ -247,18 +259,25 @@ def extract_rank_instability_from_region(region: str) -> dict | None:
         return None
     row = df.iloc[0].to_dict()
     row["Country"] = region_config.country_display_name(region)
-    row["City"] = region_config.display_label(region)
+    row["City"] = city_label if city_label is not None else region_config.display_label(region)
     row["Region"] = region
     return row
 
 
-def extract_poverty_effect_from_region(region: str) -> dict | None:
+def extract_poverty_effect_from_region(
+    region: str,
+    *,
+    finder=None,
+    city_label: str | None = None,
+) -> dict | None:
     """
     Extract Table 2 — Poverty Effect (Spatially Corrected) from 03c output.
     Columns: City, OLS τ, SEM τ, exp(SEM τ), SEM p-value
     """
     import region_config
-    tau_path = region_config.find_artifact(region, "03c_spatial_regression", "Table_tau_comparison.csv")
+    if finder is None:
+        finder = region_config.find_artifact
+    tau_path = finder(region, "03c_spatial_regression", "Table_tau_comparison.csv")
     if tau_path is None:
         return None
 
@@ -280,7 +299,7 @@ def extract_poverty_effect_from_region(region: str) -> dict | None:
 
     return {
         "Country": region_config.country_display_name(region),
-        "City": region_config.display_label(region),
+        "City": city_label if city_label is not None else region_config.display_label(region),
         "Region": region,
         "OLS_tau": ols_tau,
         "SEM_tau": sem_tau,
@@ -333,7 +352,7 @@ def _polygon_area_km2(gdf) -> float:
 def _city_boundary_area_km2(cfg, reference_gdf, region: str | None = None) -> float | None:
     """Area of the city clip polygon in km² (same UTM as grid).
 
-    Prefers the polygon saved by step 01 (`data/processed/{COUNTRY}/{city}/01/clip_boundary.gpkg`)
+    Prefers the polygon saved by step 01 (`data/processed/city/{COUNTRY}/{city}/01/clip_boundary.gpkg`)
     so OSM/geoBoundaries runs match the boundary that was actually used.
     """
     import geopandas as gpd
@@ -461,12 +480,12 @@ def main():
         "--regions",
         type=str,
         default=None,
-        help="Country codes (PHI,KEN,MEX) or city codes; default: all selected cities",
+        help="Country codes (PHL,KEN,MEX) or city codes; default: all selected cities",
     )
     p.add_argument(
         "--include-full",
         action="store_true",
-        help="Also include unclipped country extracts (outputs/{COUNTRY}/full)",
+        help=argparse.SUPPRESS,
     )
     p.add_argument(
         "-o", "--output",
@@ -496,8 +515,14 @@ def main():
         help="City boundary for step 01: local (default), osm, or geob.",
     )
     args = p.parse_args()
+    if args.include_full:
+        raise SystemExit(
+            "--include-full is retired. Cross-city tables are cities only.\n"
+            "  Meta event AOI: ./run --footprint COUNTRY\n"
+            "  then python pipeline/qa_footprints.py --footprint COUNTRY"
+        )
 
-    regions = get_regions(args.regions, include_full=args.include_full)
+    regions = get_regions(args.regions)
     if not regions:
         print("No regions to process. Check --regions or config/regions.json.")
         sys.exit(1)

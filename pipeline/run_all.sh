@@ -6,13 +6,12 @@
 if [ -n "${ZSH_VERSION:-}" ]; then
   exec /bin/bash "$0" "$@"
 fi
-# Usage: ./pipeline/run_all.sh --region COUNTRY [--all] [options]
+# Usage: ./pipeline/run_all.sh --region COUNTRY [options]
 #   --region COUNTRY  All selected cities in that country:
-#                     PHI, KEN, MEX, IDN, LKA, COL, ECU, ZAF
-#   --region COUNTRY --all
-#                     Unclipped Meta extract (all cells). IDN, LKA, COL, ECU, ZAF only.
-#   --all             All selected cities in every country (no event extracts)
-#   --one CODE        Internal / resume: run a single city or extract folder
+#                     PHL, KEN, MEX, IDN, LKA, COL, ECU, ZAF
+#   --all             All selected cities in every country
+#   --footprint COUNTRY  Meta event AOI + same 02–03f analysis as cities
+#   --one CODE        Internal / resume: run a single city folder
 #   --no-basemap --ref-hour --poverty-source --clip-source --clip-refresh --start-from
 # Missing Meta baseline GPKGs are built from the PDC zip before step 01.
 
@@ -32,12 +31,17 @@ REF_HOUR=""
 POVERTY_SOURCE=""
 CLIP_SOURCE=""
 CLIP_REFRESH=false
+BASELINE_METHOD="n_baseline"
 PASSTHROUGH=()
-USAGE="Usage: $0 --region COUNTRY [--all] [--no-basemap] [--ref-hour HOUR] [--poverty-source grdi|rwi] [--clip-source local|osm|geob] [--start-from STEP]
-  COUNTRY: PHI, KEN, MEX, IDN, LKA, COL, ECU, ZAF
+USAGE="Usage: $0 --region COUNTRY [--no-basemap] [--ref-hour HOUR] [--poverty-source grdi|rwi] [--clip-source local|osm|geob] [--baseline-method n_baseline|shift] [--start-from STEP]
+       $0 --all
+       $0 --footprint COUNTRY [--download-smod] [--baseline-method n_baseline|shift]
+  COUNTRY (cities): PHL, KEN, MEX, IDN, LKA, COL, ECU, ZAF
+  COUNTRY (footprints): same countries as cities.
   --region COUNTRY       all selected cities in that country
-  --region COUNTRY --all unclipped Meta extract (all cells); IDN, LKA, COL, ECU, ZAF
-  --all                  all selected cities in every country"
+  --all                  all selected cities in every country
+  --footprint COUNTRY    event Meta AOI + city-style 02–03f (no city clip). One country.
+  --baseline-method      n_baseline (default) or shift (7-day lag). Optional for both products."
 while [[ $# -gt 0 ]]; do
   case $1 in
     --no-basemap)
@@ -65,9 +69,19 @@ while [[ $# -gt 0 ]]; do
       PASSTHROUGH+=(--clip-refresh)
       shift
       ;;
+    --baseline-method)
+      BASELINE_METHOD="$2"
+      PASSTHROUGH+=(--baseline-method "$2")
+      shift 2
+      ;;
     --region)
       REGION="$2"
       shift 2
+      ;;
+    --footprint)
+      FOOTPRINT="$2"
+      shift 2
+      exec /bin/bash "$PROJECT_ROOT/pipeline/run_footprint_prep.sh" "$FOOTPRINT" ${BASELINE_METHOD:+--baseline-method "$BASELINE_METHOD"} "$@"
       ;;
     --one)
       ONE="$2"
@@ -111,6 +125,10 @@ _run_each() {
 # Single folder (internal / resume). Do not expand.
 if [[ -n "$ONE" ]]; then
   REGION="$ONE"
+elif [[ "$RUN_ALL" == true && -n "$REGION" ]]; then
+  echo "Unclipped extracts are retired. Cities: ./run --region $REGION"
+  echo "  Meta event footprint (no city clip): ./run --footprint $REGION"
+  exit 1
 elif [[ -n "$REGION" && "$REGION" == *_* ]]; then
   prefix="${REGION%%_*}"
   echo "Error: '$REGION' is a city code. Use --region $prefix for all selected cities in that country."
@@ -126,14 +144,12 @@ print(' '.join(region_config.list_cities()))
   _run_each "Running pipeline for all selected cities: $REGIONS" $REGIONS
   exit 0
 elif [[ -n "$REGION" ]]; then
-  EVENT_PY=False
-  [[ "$RUN_ALL" == true ]] && EVENT_PY=True
   REGIONS=$("$PYTHON" -c "
 import sys
 sys.path.insert(0, '$PROJECT_ROOT/pipeline')
 import region_config
 try:
-    matches = region_config.expand_region_to_list('$REGION', event=$EVENT_PY)
+    matches = region_config.expand_region_to_list('$REGION')
 except ValueError as e:
     print(e, file=sys.stderr)
     sys.exit(1)
@@ -142,8 +158,8 @@ if not matches:
 print(' '.join(matches))
 ")
   if [[ $? -ne 0 || -z "$REGIONS" ]]; then
-    echo "Error: No run for --region $REGION. Use PHI, KEN, MEX, IDN, LKA, COL, ECU, or ZAF."
-    echo "  Unclipped extract: ./run --region IDN --all   (also LKA, COL, ECU, ZAF)"
+    echo "Error: No run for --region $REGION. Use PHL, KEN, MEX, IDN, LKA, COL, ECU, or ZAF."
+    echo "  Meta event footprint: ./run --footprint $REGION"
     exit 1
   fi
   REGION_COUNT=$(echo "$REGIONS" | wc -w | tr -d ' ')
@@ -155,7 +171,23 @@ print(' '.join(matches))
   fi
 fi
 
-# Output paths: CSVs under outputs/{country}/{city|full}/, figures under figure/...
+if [[ -n "$REGION" ]]; then
+  REQUIRE_ERR=$("$PYTHON" -c "
+import sys
+sys.path.insert(0, '$PROJECT_ROOT/pipeline')
+import region_config
+try:
+    region_config.require_city_region('$REGION')
+except ValueError as e:
+    print(e)
+    sys.exit(1)
+" 2>&1) || {
+    echo "$REQUIRE_ERR"
+    exit 1
+  }
+fi
+
+# Output paths: CSVs under outputs/city/{country}/{city}/, figures under figure/city/...
 if [[ -n "$REGION" ]]; then
   eval "$("$PYTHON" -c "
 import sys
@@ -248,6 +280,7 @@ print(cfg['meta'])
     echo "[0/15] Meta baseline missing — building from PDC zip..."
     BUILD_ARGS=(--region "$REGION" -o "$META_GPKG")
     [[ -n "$REF_HOUR" ]] && BUILD_ARGS+=(--ref-hour "$REF_HOUR")
+    [[ -n "$BASELINE_METHOD" ]] && BUILD_ARGS+=(--baseline-method "$BASELINE_METHOD")
     "$PYTHON" "$PROJECT_ROOT/data_prep/build_fb_baseline_median.py" "${BUILD_ARGS[@]}"
   else
     echo ""
@@ -262,6 +295,7 @@ if _run_step "01"; then
   if [[ -n "$REGION" ]]; then
     HARMONISE_ARGS=(--region "$REGION")
     [[ -n "$REF_HOUR" ]] && HARMONISE_ARGS+=(--ref-hour "$REF_HOUR")
+    [[ -n "$BASELINE_METHOD" ]] && HARMONISE_ARGS+=(--baseline-method "$BASELINE_METHOD")
     [[ -n "$POVERTY_SOURCE" ]] && HARMONISE_ARGS+=(--poverty-source "$POVERTY_SOURCE")
     [[ -n "$CLIP_SOURCE" ]] && HARMONISE_ARGS+=(--clip-source "$CLIP_SOURCE")
     [[ "$CLIP_REFRESH" == true ]] && HARMONISE_ARGS+=(--clip-refresh)
@@ -293,9 +327,13 @@ if _run_step "02"; then
   echo ""
   echo "[3/15] Comparing Meta vs WorldPop..."
   if [[ -n "$REGION" ]]; then
-    "$PYTHON" "$SCRIPTS/02_compare_meta_worldpop.py" --region "$REGION"
+    COMPARE_ARGS=(--region "$REGION")
+    [[ ${#R_ARGS[@]} -gt 0 ]] && COMPARE_ARGS+=("${R_ARGS[@]}")
+    "$PYTHON" "$SCRIPTS/02_compare_meta_worldpop.py" "${COMPARE_ARGS[@]}"
   else
-    "$PYTHON" "$SCRIPTS/02_compare_meta_worldpop.py" -i "$GPKG_01"
+    COMPARE_ARGS=(-i "$GPKG_01")
+    [[ ${#R_ARGS[@]} -gt 0 ]] && COMPARE_ARGS+=("${R_ARGS[@]}")
+    "$PYTHON" "$SCRIPTS/02_compare_meta_worldpop.py" "${COMPARE_ARGS[@]}"
   fi
 
   echo ""
@@ -370,7 +408,7 @@ fi
 if _run_step "03d"; then
   echo ""
   echo "[12/15] Bivariate map (03d)..."
-  Rscript "$SCRIPTS/03d_bivariate_map_poverty_residual.R" -i "$GPKG_02" "${R_REGION_ARGS[@]}"
+  Rscript "$SCRIPTS/03d_bivariate_map_poverty_residual.R" -i "$GPKG_02" "${R_REGION_ARGS[@]}" "${R_ARGS[@]}"
 else
   echo ""
   echo "[12/15] 03d bivariate skipped"

@@ -37,6 +37,7 @@ in_dir <- file.path(project_root, "outputs", "03a_regression")
 out_dir <- in_dir
 region_arg <- NULL
 o_arg <- NULL
+footprint_arg <- NULL
 args <- commandArgs(trailingOnly = TRUE)
 i <- 1
 while (i <= length(args)) {
@@ -50,11 +51,14 @@ while (i <= length(args)) {
   } else if (args[i] == "--region" && i < length(args)) {
     region_arg <- args[i + 1]
     i <- i + 2
+  } else if (args[i] == "--footprint" && i < length(args)) {
+    footprint_arg <- args[i + 1]
+    i <- i + 2
   } else {
     i <- i + 1
   }
 }
-out_dir <- resolve_plot_out_dir(region_arg, in_dir, "03a_regression", o_arg)
+out_dir <- resolve_plot_out_dir(region_arg, in_dir, "03a_regression", o_arg, footprint_arg)
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 res_path <- file.path(in_dir, "03a_residual_for_plots.csv")

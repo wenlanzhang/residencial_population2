@@ -17,10 +17,10 @@ Methodology:
   4. Median baseline per quadkey → GeoPackage
 
 Usage:
-  python data_prep/build_fb_baseline_median.py --region PHI_CagayandeOroCity
+  python data_prep/build_fb_baseline_median.py --region PHL_CagayandeOroCity
   python data_prep/build_fb_baseline_median.py --all
   python data_prep/build_fb_baseline_median.py --all --ref-hour 8
-  python data_prep/build_fb_baseline_median.py -i /path/to/event.zip -o outputs/PHI/fb_baseline_median_h08.gpkg
+  python data_prep/build_fb_baseline_median.py -i /path/to/event.zip -o outputs/PHL/fb_baseline_median_h08.gpkg
 
 Output: outputs/{REGION}/fb_baseline_median_h{00|08|16}.gpkg (folder + filename indicate hour).
 
@@ -128,7 +128,7 @@ def parse_args():
         "--region",
         type=str,
         default=None,
-        help="Region code from config/regions.json (e.g. PHI_CagayandeOroCity, KEN_Nairobi, KEN_Mombasa, MEX). Sets input, output, dates.",
+        help="Region code from config/regions.json (e.g. PHL_CagayandeOroCity, KEN_Nairobi, MEX_MexicoCity). Sets input, output, dates.",
     )
     p.add_argument(
         "--all",
@@ -183,6 +183,14 @@ def parse_args():
         action="store_true",
         help="Use n_baseline from CSV directly (Meta pre-computed). Use when data doesn't span 7+ days for shift.",
     )
+    p.add_argument(
+        "--baseline-method",
+        type=str,
+        default=None,
+        choices=["n_baseline", "shift"],
+        help="Same as city/footprint 01: n_baseline or 7-day shift. Writes a tagged GPKG "
+             "(fb_baseline_median_hHH_{method}.gpkg). Overrides --use-baseline-column and config auto.",
+    )
     return p.parse_args()
 
 
@@ -193,12 +201,18 @@ def build_baseline_for_region(region: str, ref_hour: int, args) -> None:
     cfg = region_config.get_region_config(region)
     input_path = args.input or cfg.get("pdc_raw_dir") or cfg.get("pdc_processed_csv")
     config_use_baseline = cfg.get("pdc_use_baseline_column")  # None = auto
-    if args.use_baseline_column:
+    if args.baseline_method == "n_baseline":
+        config_use_baseline = True
+    elif args.baseline_method == "shift":
+        config_use_baseline = False
+    elif args.use_baseline_column:
         config_use_baseline = True
     if not input_path:
         raise ValueError(f"Region {region} needs pdc_raw_dir or pdc_processed_csv in config")
 
-    output_path = args.output or region_config.baseline_path(region, ref_hour)
+    output_path = args.output or region_config.baseline_path(
+        region, ref_hour, method=args.baseline_method
+    )
 
     print(f"\n--- {region} ({cfg.get('name', region)}), ref_hour={ref_hour} ---")
 
@@ -321,7 +335,7 @@ def main():
     if args.all:
         import region_config
 
-        regions = region_config.list_regions()
+        regions = region_config.list_cities()
         print(f"Building baseline for {len(regions)} regions: {', '.join(regions)}")
         for region in regions:
             cfg = region_config.get_region_config(region)
@@ -332,13 +346,13 @@ def main():
         print(f"\nDone. Built baseline for {len(regions)} regions.")
         return
 
-    # Single-region or prefix (PHI, KEN) mode
+    # Single-region or prefix (PHL, KEN) mode
     if args.region:
         import region_config
 
         regions = region_config.expand_region_to_list(args.region)
         if not regions:
-            raise ValueError(f"No region matches '{args.region}'. Use PHI, KEN, MEX, IDN, LKA, COL, ECU, ZAF or full codes.")
+            raise ValueError(f"No region matches '{args.region}'. Use PHL, KEN, MEX, IDN, LKA, COL, ECU, ZAF or full codes.")
         if len(regions) > 1:
             print(f"Building baseline for {args.region} ({len(regions)} regions): {', '.join(regions)}")
         for region in regions:

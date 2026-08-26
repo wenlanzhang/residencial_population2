@@ -41,7 +41,9 @@ def load_and_prepare_gdf(input_path, project_crs: str, residual_col: str = "allo
     Returns:
         gdf_analysis: GeoDataFrame with residual_col, poverty_mean, Distance, PopulationDensity
     """
-    gdf = gpd.read_file(input_path)
+    gdf = gpd.read_file(input_path) if Path(input_path).suffix.lower() != ".parquet" else gpd.read_parquet(input_path)
+    if gdf.crs is None:
+        gdf = gdf.set_crs("EPSG:4326")
     if "poverty_mean" not in gdf.columns:
         raise ValueError("Input must include poverty_mean. Run script 01 with --poverty, then script 02.")
     # Backward compat: old gpkg may have allocation_log_ratio

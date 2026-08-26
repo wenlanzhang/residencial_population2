@@ -3,12 +3,205 @@
   "poverty_source": "grdi",
   "poverty_grdi": "data/raw/povmap-grdi-v1-10.tif",
   "clip_source": "local",
-  "PHI_CagayandeOroCity": {
+  "ghsl_smod": "data/raw/ghsl/GHS_SMOD_E2020_GLOBE_R2023A_4326_30ss_V2_0.tif",
+  "ghsl_ucdb": "data/raw/GHS_STAT_UCDB2015MT_GLOBE_R2019A/GHS_STAT_UCDB2015MT_GLOBE_R2019A_V1_2.gpkg",
+  "footprints": {
+    "KEN": {
+      "name": "Kenya (Meta flood PDC footprint)",
+      "iso3": "KEN",
+      "country_name": "Kenya",
+      "pdc_ref_hour": 16,
+      "worldpop": "data/raw/worldpop/ken_pop_2024_CN_100m_R2025A_v1.tif",
+      "meta": "outputs/footprints/KEN/meta/fb_baseline_median_h16_n_baseline.gpkg",
+      "poverty": "Meta/RWI/ken_relative_wealth_index.csv",
+      "pdc_raw_dir": "Meta_Event/Pop/20240424_KenyaFloods.zip",
+      "pdc_use_baseline_column": true,
+      "city_boundaries": {
+        "Nairobi": "data/raw/boundaries/Ken/Nairobi.gpkg",
+        "Mombasa": "data/raw/boundaries/Ken/Mombasa.gpkg",
+        "Kisumu": "data/raw/boundaries/Ken/Kisumu.gpkg",
+        "Nakuru": "data/raw/boundaries/Ken/Nakuru.gpkg"
+      },
+      "lon_range": [
+        33.5,
+        42
+      ],
+      "lat_range": [
+        -5,
+        5.5
+      ]
+    },
+    "PHL": {
+      "name": "Philippines (Meta Basyang / Mindanao footprint)",
+      "iso3": "PHL",
+      "country_name": "Philippines",
+      "pdc_ref_hour": 8,
+      "worldpop": "data/raw/worldpop/phl_pop_2026_CN_100m_R2025A_v1.tif",
+      "meta": "outputs/footprints/PHL/meta/fb_baseline_median_h08_n_baseline.gpkg",
+      "poverty": "Meta/RWI/philippine_relative_wealth_index.csv",
+      "pdc_raw_dir": "Meta_Event/Pop/20260207Tropical Storm Basyang Across Mindanao, Philippines.zip",
+      "pdc_use_baseline_column": true,
+      "city_boundaries": {
+        "Cagayan de Oro": "data/raw/boundaries/Phi/CagayandeOroCity.gpkg",
+        "Davao City": "data/raw/boundaries/Phi/DavaoCity.gpkg",
+        "Zamboanga City": "data/raw/boundaries/Phi/ZamboangaCity.gpkg",
+        "General Santos": "data/raw/boundaries/Phi/GeneralSantosCity.gpkg"
+      },
+      "lon_range": [
+        117,
+        127
+      ],
+      "lat_range": [
+        4,
+        13
+      ]
+    },
+    "MEX": {
+      "name": "Mexico (Meta central-Mexico earthquake footprint)",
+      "iso3": "MEX",
+      "country_name": "Mexico",
+      "pdc_ref_hour": 0,
+      "worldpop": "data/raw/worldpop/mex_pop_2025_CN_100m_R2025A_v1.tif",
+      "meta": "outputs/footprints/MEX/meta/fb_baseline_median_h00_n_baseline.gpkg",
+      "poverty": "Meta/RWI/mex_relative_wealth_index.csv",
+      "pdc_raw_dir": "Meta_Event/Pop/20260102The Earthquake Across Central Mexico.zip",
+      "pdc_use_baseline_column": true,
+      "city_boundaries": {
+        "Mexico City": "data/raw/boundaries/Mex/Distrito_Federal.gpkg",
+        "Puebla": "data/raw/boundaries/Mex/Puebla.gpkg",
+        "León": "data/raw/boundaries/Mex/Leon.gpkg"
+      },
+      "lon_range": [
+        -103.5,
+        -94
+      ],
+      "lat_range": [
+        15,
+        24
+      ]
+    },
+    "IDN": {
+      "name": "Indonesia (Meta Cyclone Senyar / Sumatra footprint)",
+      "iso3": "IDN",
+      "country_name": "Indonesia",
+      "pdc_ref_hour": 8,
+      "worldpop": "data/raw/worldpop/idn_pop_2025_CN_100m_R2025A_v1.tif",
+      "meta": "outputs/footprints/IDN/meta/fb_baseline_median_h08_n_baseline.gpkg",
+      "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/IDN_relative_wealth_index.csv",
+      "pdc_raw_dir": "Meta_Event/Pop/20251128_Tropical Cyclone Senyar In Sumatra Indonesia 11.28.2025.zip",
+      "pdc_use_baseline_column": true,
+      "city_boundaries": {
+        "Medan": "data/raw/boundaries/cache/geob/IDN_Medan.gpkg",
+        "Banda Aceh": "data/raw/boundaries/cache/geob/IDN_BandaAceh.gpkg"
+      },
+      "lon_range": [
+        95.2,
+        105.2
+      ],
+      "lat_range": [
+        -2.2,
+        6.0
+      ]
+    },
+    "LKA": {
+      "name": "Sri Lanka (Meta flooding footprint)",
+      "iso3": "LKA",
+      "country_name": "Sri Lanka",
+      "pdc_ref_hour": 8,
+      "worldpop": "data/raw/worldpop/lka_pop_2025_CN_100m_R2025A_v1.tif",
+      "meta": "outputs/footprints/LKA/meta/fb_baseline_median_h08_n_baseline.gpkg",
+      "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/LKA_relative_wealth_index.csv",
+      "pdc_raw_dir": "Meta_Event/Pop/20251129_The Flooding in Sri Lanka.zip",
+      "pdc_use_baseline_column": true,
+      "city_boundaries": {
+        "Colombo": "data/raw/boundaries/cache/geob/LKA_Colombo.gpkg",
+        "Kandy": "data/raw/boundaries/cache/geob/LKA_Kandy.gpkg"
+      },
+      "lon_range": [
+        79.6,
+        82.0
+      ],
+      "lat_range": [
+        5.8,
+        9.9
+      ]
+    },
+    "COL": {
+      "name": "Colombia (Meta northwestern flooding footprint)",
+      "iso3": "COL",
+      "country_name": "Colombia",
+      "pdc_ref_hour": 0,
+      "worldpop": "data/raw/worldpop/col_pop_2026_CN_100m_R2025A_v1.tif",
+      "meta": "outputs/footprints/COL/meta/fb_baseline_median_h00_n_baseline.gpkg",
+      "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/COL_relative_wealth_index.csv",
+      "pdc_raw_dir": "Meta_Event/Pop/20260203Flooding Across Northwestern Colombia.zip",
+      "pdc_use_baseline_column": true,
+      "city_boundaries": {
+        "Barranquilla": "data/raw/boundaries/cache/geob/COL_Barranquilla.gpkg",
+        "Cartagena": "data/raw/boundaries/cache/geob/COL_Cartagena.gpkg"
+      },
+      "lon_range": [
+        -77.9,
+        -70.5
+      ],
+      "lat_range": [
+        5.9,
+        12.3
+      ]
+    },
+    "ECU": {
+      "name": "Ecuador (Meta Azuay flooding footprint)",
+      "iso3": "ECU",
+      "country_name": "Ecuador",
+      "pdc_ref_hour": 0,
+      "worldpop": "data/raw/worldpop/ecu_pop_2026_CN_100m_R2025A_v1.tif",
+      "meta": "outputs/footprints/ECU/meta/fb_baseline_median_h00_n_baseline.gpkg",
+      "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/ECU_relative_wealth_index.csv",
+      "pdc_raw_dir": "Meta_Event/Pop/20260312Flooding In Azuay Province, Ecuador.zip",
+      "pdc_use_baseline_column": true,
+      "city_boundaries": {
+        "Cuenca": "data/raw/boundaries/cache/geob/ECU_Cuenca.gpkg",
+        "Guayaquil": "data/raw/boundaries/cache/geob/ECU_Guayaquil.gpkg"
+      },
+      "lon_range": [
+        -81.1,
+        -75.4
+      ],
+      "lat_range": [
+        -5.0,
+        1.4
+      ]
+    },
+    "ZAF": {
+      "name": "South Africa (Meta Western Cape storm footprint)",
+      "iso3": "ZAF",
+      "country_name": "South Africa",
+      "pdc_ref_hour": 16,
+      "worldpop": "data/raw/worldpop/zaf_pop_2026_CN_100m_R2025A_v1.tif",
+      "meta": "outputs/footprints/ZAF/meta/fb_baseline_median_h16_n_baseline.gpkg",
+      "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/ZAF_relative_wealth_index.csv",
+      "pdc_raw_dir": "Meta_Event/Pop/20260514_The Storm Across Western Cape, South Africa.zip",
+      "pdc_use_baseline_column": true,
+      "city_boundaries": {
+        "Cape Town": "data/raw/boundaries/cache/geob/ZAF_CapeTown.gpkg",
+        "Garden Route": "data/raw/boundaries/cache/geob/ZAF_GardenRoute.gpkg"
+      },
+      "lon_range": [
+        16.8,
+        27.1
+      ],
+      "lat_range": [
+        -35.0,
+        -28.7
+      ]
+    }
+  },
+  "PHL_CagayandeOroCity": {
     "name": "Philippines (Cagayan de Oro)",
-    "pdc_ref_hour": 0,
+    "pdc_ref_hour": 8,
     "city_label": "Cagayan de Oro",
     "worldpop": "data/raw/worldpop/phl_pop_2026_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/PHI/fb_baseline_median_h00.gpkg",
+    "meta": "data/baselines/PHL/fb_baseline_median_h08.gpkg",
     "poverty": "Meta/RWI/philippine_relative_wealth_index.csv",
     "clip_shape": "data/raw/boundaries/Phi/CagayandeOroCity.gpkg",
     "clip_osm_place": "Cagayan de Oro, Philippines",
@@ -16,7 +209,7 @@
     "clip_geob_adm": "ADM3",
     "clip_geob_name": "Cagayan de Oro",
     "pdc_raw_dir": "Meta_Event/Pop/20260207Tropical Storm Basyang Across Mindanao, Philippines.zip",
-    "pdc_processed_csv": "outputs/PHI/PDC_Philippines_Basyang.csv",
+    "pdc_processed_csv": "outputs/PHL/PDC_Philippines_Basyang.csv",
     "pdc_use_baseline_column": true,
     "map_bbox": [
       125.0088,
@@ -34,12 +227,12 @@
       20
     ]
   },
-  "PHI_DavaoCity": {
+  "PHL_DavaoCity": {
     "name": "Philippines (Davao City)",
-    "pdc_ref_hour": 0,
+    "pdc_ref_hour": 8,
     "city_label": "Davao City",
     "worldpop": "data/raw/worldpop/phl_pop_2026_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/PHI/fb_baseline_median_h00.gpkg",
+    "meta": "data/baselines/PHL/fb_baseline_median_h08.gpkg",
     "poverty": "Meta/RWI/philippine_relative_wealth_index.csv",
     "clip_shape": "data/raw/boundaries/Phi/DavaoCity.gpkg",
     "clip_osm_place": "Davao City, Philippines",
@@ -47,7 +240,7 @@
     "clip_geob_adm": "ADM3",
     "clip_geob_name": "Davao City",
     "pdc_raw_dir": "Meta_Event/Pop/20260207Tropical Storm Basyang Across Mindanao, Philippines.zip",
-    "pdc_processed_csv": "outputs/PHI/PDC_Philippines_Basyang.csv",
+    "pdc_processed_csv": "outputs/PHL/PDC_Philippines_Basyang.csv",
     "pdc_use_baseline_column": true,
     "map_bbox": [
       125.0088,
@@ -65,12 +258,74 @@
       20
     ]
   },
+  "PHL_ZamboangaCity": {
+    "name": "Philippines (Zamboanga City)",
+    "pdc_ref_hour": 8,
+    "city_label": "Zamboanga City",
+    "worldpop": "data/raw/worldpop/phl_pop_2026_CN_100m_R2025A_v1.tif",
+    "meta": "data/baselines/PHL/fb_baseline_median_h08.gpkg",
+    "poverty": "Meta/RWI/philippine_relative_wealth_index.csv",
+    "clip_shape": "data/raw/boundaries/Phi/ZamboangaCity.gpkg",
+    "clip_osm_place": "Zamboanga City, Philippines",
+    "clip_geob_iso3": "PHL",
+    "clip_geob_adm": "ADM3",
+    "clip_geob_name": "Zamboanga City",
+    "pdc_raw_dir": "Meta_Event/Pop/20260207Tropical Storm Basyang Across Mindanao, Philippines.zip",
+    "pdc_processed_csv": "outputs/PHL/PDC_Philippines_Basyang.csv",
+    "pdc_use_baseline_column": true,
+    "map_bbox": [
+      121.8975,
+      6.8584,
+      122.4289,
+      7.5137
+    ],
+    "map_bbox_label": "Zamboanga City",
+    "lon_range": [
+      121.8,
+      122.5
+    ],
+    "lat_range": [
+      6.8,
+      7.6
+    ]
+  },
+  "PHL_GeneralSantosCity": {
+    "name": "Philippines (General Santos City)",
+    "pdc_ref_hour": 8,
+    "city_label": "General Santos",
+    "worldpop": "data/raw/worldpop/phl_pop_2026_CN_100m_R2025A_v1.tif",
+    "meta": "data/baselines/PHL/fb_baseline_median_h08.gpkg",
+    "poverty": "Meta/RWI/philippine_relative_wealth_index.csv",
+    "clip_shape": "data/raw/boundaries/Phi/GeneralSantosCity.gpkg",
+    "clip_osm_place": "General Santos, Philippines",
+    "clip_geob_iso3": "PHL",
+    "clip_geob_adm": "ADM3",
+    "clip_geob_name": "General Santos City",
+    "pdc_raw_dir": "Meta_Event/Pop/20260207Tropical Storm Basyang Across Mindanao, Philippines.zip",
+    "pdc_processed_csv": "outputs/PHL/PDC_Philippines_Basyang.csv",
+    "pdc_use_baseline_column": true,
+    "map_bbox": [
+      124.9904,
+      5.9553,
+      125.2695,
+      6.2967
+    ],
+    "map_bbox_label": "General Santos",
+    "lon_range": [
+      124.9,
+      125.4
+    ],
+    "lat_range": [
+      5.9,
+      6.4
+    ]
+  },
   "KEN_Nairobi": {
     "name": "Kenya (Nairobi)",
-    "pdc_ref_hour": 0,
+    "pdc_ref_hour": 16,
     "city_label": "Nairobi",
     "worldpop": "data/raw/worldpop/ken_pop_2024_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/KEN/fb_baseline_median_h00.gpkg",
+    "meta": "data/baselines/KEN/fb_baseline_median_h16.gpkg",
     "poverty": "Meta/RWI/ken_relative_wealth_index.csv",
     "clip_shape": "data/raw/boundaries/Ken/Nairobi.gpkg",
     "clip_osm_place": "Nairobi, Kenya",
@@ -79,7 +334,7 @@
     "clip_geob_name": "Nairobi",
     "pdc_raw_dir": "Meta_Event/Pop/20240424_KenyaFloods.zip",
     "pdc_processed_csv": "outputs/KEN/PDC_Kenya.csv",
-    "pdc_use_baseline_column": false,
+    "pdc_use_baseline_column": true,
     "map_bbox": [
       36.6,
       -1.54,
@@ -98,10 +353,10 @@
   },
   "KEN_Mombasa": {
     "name": "Kenya (Mombasa)",
-    "pdc_ref_hour": 0,
+    "pdc_ref_hour": 16,
     "city_label": "Mombasa",
     "worldpop": "data/raw/worldpop/ken_pop_2024_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/KEN/fb_baseline_median_h00.gpkg",
+    "meta": "data/baselines/KEN/fb_baseline_median_h16.gpkg",
     "poverty": "Meta/RWI/ken_relative_wealth_index.csv",
     "clip_shape": "data/raw/boundaries/Ken/Mombasa.gpkg",
     "clip_osm_place": "Mombasa, Kenya",
@@ -110,7 +365,7 @@
     "clip_geob_name": "Mombasa",
     "pdc_raw_dir": "Meta_Event/Pop/20240424_KenyaFloods.zip",
     "pdc_processed_csv": "outputs/KEN/PDC_Kenya.csv",
-    "pdc_use_baseline_column": false,
+    "pdc_use_baseline_column": true,
     "map_bbox": [
       39.5,
       -4.2,
@@ -141,7 +396,7 @@
     "clip_geob_name": "Kisumu",
     "pdc_raw_dir": "Meta_Event/Pop/20240424_KenyaFloods.zip",
     "pdc_processed_csv": "outputs/KEN/PDC_Kenya.csv",
-    "pdc_use_baseline_column": false,
+    "pdc_use_baseline_column": true,
     "map_bbox": [
       34.4114,
       -0.416,
@@ -172,7 +427,7 @@
     "clip_geob_name": "Nakuru",
     "pdc_raw_dir": "Meta_Event/Pop/20240424_KenyaFloods.zip",
     "pdc_processed_csv": "outputs/KEN/PDC_Kenya.csv",
-    "pdc_use_baseline_column": false,
+    "pdc_use_baseline_column": true,
     "map_bbox": [
       35.4125,
       -1.1559,
@@ -189,69 +444,7 @@
       0.3
     ]
   },
-  "PHI_ZamboangaCity": {
-    "name": "Philippines (Zamboanga City)",
-    "pdc_ref_hour": 8,
-    "city_label": "Zamboanga City",
-    "worldpop": "data/raw/worldpop/phl_pop_2026_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/PHI/fb_baseline_median_h08.gpkg",
-    "poverty": "Meta/RWI/philippine_relative_wealth_index.csv",
-    "clip_shape": "data/raw/boundaries/Phi/ZamboangaCity.gpkg",
-    "clip_osm_place": "Zamboanga City, Philippines",
-    "clip_geob_iso3": "PHL",
-    "clip_geob_adm": "ADM3",
-    "clip_geob_name": "Zamboanga City",
-    "pdc_raw_dir": "Meta_Event/Pop/20260207Tropical Storm Basyang Across Mindanao, Philippines.zip",
-    "pdc_processed_csv": "outputs/PHI/PDC_Philippines_Basyang.csv",
-    "pdc_use_baseline_column": true,
-    "map_bbox": [
-      121.8975,
-      6.8584,
-      122.4289,
-      7.5137
-    ],
-    "map_bbox_label": "Zamboanga City",
-    "lon_range": [
-      121.8,
-      122.5
-    ],
-    "lat_range": [
-      6.8,
-      7.6
-    ]
-  },
-  "PHI_GeneralSantosCity": {
-    "name": "Philippines (General Santos City)",
-    "pdc_ref_hour": 8,
-    "city_label": "General Santos",
-    "worldpop": "data/raw/worldpop/phl_pop_2026_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/PHI/fb_baseline_median_h08.gpkg",
-    "poverty": "Meta/RWI/philippine_relative_wealth_index.csv",
-    "clip_shape": "data/raw/boundaries/Phi/GeneralSantosCity.gpkg",
-    "clip_osm_place": "General Santos, Philippines",
-    "clip_geob_iso3": "PHL",
-    "clip_geob_adm": "ADM3",
-    "clip_geob_name": "General Santos City",
-    "pdc_raw_dir": "Meta_Event/Pop/20260207Tropical Storm Basyang Across Mindanao, Philippines.zip",
-    "pdc_processed_csv": "outputs/PHI/PDC_Philippines_Basyang.csv",
-    "pdc_use_baseline_column": true,
-    "map_bbox": [
-      124.9904,
-      5.9553,
-      125.2695,
-      6.2967
-    ],
-    "map_bbox_label": "General Santos",
-    "lon_range": [
-      124.9,
-      125.4
-    ],
-    "lat_range": [
-      5.9,
-      6.4
-    ]
-  },
-  "MEX": {
+  "MEX_MexicoCity": {
     "name": "Mexico City",
     "pdc_ref_hour": 0,
     "worldpop": "data/raw/worldpop/mex_pop_2025_CN_100m_R2025A_v1.tif",
@@ -279,7 +472,8 @@
     "lat_range": [
       16,
       23
-    ]
+    ],
+    "pdc_use_baseline_column": true
   },
   "MEX_Puebla": {
     "name": "Mexico (Puebla)",
@@ -309,20 +503,21 @@
     "lat_range": [
       18.8,
       19.3
-    ]
+    ],
+    "pdc_use_baseline_column": true
   },
   "MEX_Leon": {
-    "name": "Mexico (Le\u00f3n)",
+    "name": "Mexico (León)",
     "pdc_ref_hour": 0,
-    "city_label": "Le\u00f3n",
+    "city_label": "León",
     "worldpop": "data/raw/worldpop/mex_pop_2025_CN_100m_R2025A_v1.tif",
     "meta": "data/baselines/MEX/fb_baseline_median_h00.gpkg",
     "poverty": "Meta/RWI/mex_relative_wealth_index.csv",
     "clip_shape": "data/raw/boundaries/Mex/Leon.gpkg",
-    "clip_osm_place": "Le\u00f3n, Guanajuato, Mexico",
+    "clip_osm_place": "León, Guanajuato, Mexico",
     "clip_geob_iso3": "MEX",
     "clip_geob_adm": "ADM2",
-    "clip_geob_name": "Le\u00f3n",
+    "clip_geob_name": "León",
     "pdc_raw_dir": "Meta_Event/Pop/20260102The Earthquake Across Central Mexico.zip",
     "pdc_processed_csv": "outputs/MEX/PDC_Mexico.csv",
     "map_bbox": [
@@ -331,7 +526,7 @@
       -101.3723,
       21.3302
     ],
-    "map_bbox_label": "Le\u00f3n",
+    "map_bbox_label": "León",
     "lon_range": [
       -101.9,
       -101.3
@@ -339,14 +534,15 @@
     "lat_range": [
       20.8,
       21.4
-    ]
+    ],
+    "pdc_use_baseline_column": true
   },
   "IDN": {
     "name": "Indonesia (Cyclone Senyar, Sumatra)",
-    "pdc_ref_hour": 0,
+    "pdc_ref_hour": 8,
     "city_label": "Sumatra",
     "worldpop": "data/raw/worldpop/idn_pop_2025_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/IDN/fb_baseline_median_h00.gpkg",
+    "meta": "data/baselines/IDN/fb_baseline_median_h08.gpkg",
     "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/IDN_relative_wealth_index.csv",
     "clip_shape": null,
     "clip_osm_place": "Sumatera Utara, Indonesia",
@@ -372,137 +568,13 @@
       6.0
     ]
   },
-  "LKA": {
-    "name": "Sri Lanka (flooding)",
-    "pdc_ref_hour": 0,
-    "city_label": "Sri Lanka",
-    "worldpop": "data/raw/worldpop/lka_pop_2025_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/LKA/fb_baseline_median_h00.gpkg",
-    "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/LKA_relative_wealth_index.csv",
-    "clip_shape": null,
-    "clip_osm_place": "Sri Lanka",
-    "clip_geob_iso3": "LKA",
-    "clip_geob_adm": "ADM0",
-    "clip_geob_name": "Sri Lanka",
-    "pdc_raw_dir": "Meta_Event/Pop/20251129_The Flooding in Sri Lanka.zip",
-    "pdc_processed_csv": "outputs/LKA/PDC_SriLanka.csv",
-    "pdc_use_baseline_column": true,
-    "map_bbox": [
-      79.6,
-      5.8,
-      82.0,
-      9.9
-    ],
-    "map_bbox_label": "Sri Lanka",
-    "lon_range": [
-      79.6,
-      82.0
-    ],
-    "lat_range": [
-      5.8,
-      9.9
-    ]
-  },
-  "COL": {
-    "name": "Colombia (northwestern flooding)",
-    "pdc_ref_hour": 0,
-    "city_label": "Northwestern Colombia",
-    "worldpop": "data/raw/worldpop/col_pop_2026_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/COL/fb_baseline_median_h00.gpkg",
-    "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/COL_relative_wealth_index.csv",
-    "clip_shape": null,
-    "clip_osm_place": "Atl\u00e1ntico, Colombia",
-    "clip_geob_iso3": "COL",
-    "clip_geob_adm": "ADM1",
-    "clip_geob_name": "Atl\u00e1ntico",
-    "pdc_raw_dir": "Meta_Event/Pop/20260203Flooding Across Northwestern Colombia.zip",
-    "pdc_processed_csv": "outputs/COL/PDC_Colombia.csv",
-    "pdc_use_baseline_column": true,
-    "map_bbox": [
-      -77.9,
-      5.9,
-      -70.5,
-      12.3
-    ],
-    "map_bbox_label": "Northwestern Colombia",
-    "lon_range": [
-      -77.9,
-      -70.5
-    ],
-    "lat_range": [
-      5.9,
-      12.3
-    ]
-  },
-  "ECU": {
-    "name": "Ecuador (Azuay flooding)",
-    "pdc_ref_hour": 0,
-    "city_label": "Azuay",
-    "worldpop": "data/raw/worldpop/ecu_pop_2026_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/ECU/fb_baseline_median_h00.gpkg",
-    "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/ECU_relative_wealth_index.csv",
-    "clip_shape": null,
-    "clip_osm_place": "Azuay, Ecuador",
-    "clip_geob_iso3": "ECU",
-    "clip_geob_adm": "ADM1",
-    "clip_geob_name": "Azuay",
-    "pdc_raw_dir": "Meta_Event/Pop/20260312Flooding In Azuay Province, Ecuador.zip",
-    "pdc_processed_csv": "outputs/ECU/PDC_Ecuador_Azuay.csv",
-    "pdc_use_baseline_column": true,
-    "map_bbox": [
-      -81.1,
-      -5.0,
-      -75.4,
-      1.4
-    ],
-    "map_bbox_label": "Azuay / Ecuador",
-    "lon_range": [
-      -81.1,
-      -75.4
-    ],
-    "lat_range": [
-      -5.0,
-      1.4
-    ]
-  },
-  "ZAF": {
-    "name": "South Africa (Western Cape storm)",
-    "pdc_ref_hour": 0,
-    "city_label": "Western Cape",
-    "worldpop": "data/raw/worldpop/zaf_pop_2026_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/ZAF/fb_baseline_median_h00.gpkg",
-    "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/ZAF_relative_wealth_index.csv",
-    "clip_shape": null,
-    "clip_osm_place": "Western Cape, South Africa",
-    "clip_geob_iso3": "ZAF",
-    "clip_geob_adm": "ADM1",
-    "clip_geob_name": "Western Cape",
-    "pdc_raw_dir": "Meta_Event/Pop/20260514_The Storm Across Western Cape, South Africa.zip",
-    "pdc_processed_csv": "outputs/ZAF/PDC_SouthAfrica_WesternCape.csv",
-    "pdc_use_baseline_column": true,
-    "map_bbox": [
-      16.8,
-      -35.0,
-      27.1,
-      -28.7
-    ],
-    "map_bbox_label": "Western Cape",
-    "lon_range": [
-      16.8,
-      27.1
-    ],
-    "lat_range": [
-      -35.0,
-      -28.7
-    ]
-  },
   "IDN_Medan": {
     "name": "Indonesia (Medan)",
-    "pdc_ref_hour": 0,
+    "pdc_ref_hour": 8,
     "city_label": "Medan",
     "clip_source": "geob",
     "worldpop": "data/raw/worldpop/idn_pop_2025_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/IDN/fb_baseline_median_h00.gpkg",
+    "meta": "data/baselines/IDN/fb_baseline_median_h08.gpkg",
     "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/IDN_relative_wealth_index.csv",
     "clip_shape": null,
     "clip_osm_place": "Medan, Indonesia",
@@ -530,11 +602,11 @@
   },
   "IDN_BandaAceh": {
     "name": "Indonesia (Banda Aceh)",
-    "pdc_ref_hour": 0,
+    "pdc_ref_hour": 8,
     "city_label": "Banda Aceh",
     "clip_source": "geob",
     "worldpop": "data/raw/worldpop/idn_pop_2025_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/IDN/fb_baseline_median_h00.gpkg",
+    "meta": "data/baselines/IDN/fb_baseline_median_h08.gpkg",
     "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/IDN_relative_wealth_index.csv",
     "clip_shape": null,
     "clip_osm_place": "Banda Aceh, Indonesia",
@@ -560,13 +632,44 @@
       5.65
     ]
   },
+  "LKA": {
+    "name": "Sri Lanka (flooding)",
+    "pdc_ref_hour": 8,
+    "city_label": "Sri Lanka",
+    "worldpop": "data/raw/worldpop/lka_pop_2025_CN_100m_R2025A_v1.tif",
+    "meta": "data/baselines/LKA/fb_baseline_median_h08.gpkg",
+    "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/LKA_relative_wealth_index.csv",
+    "clip_shape": null,
+    "clip_osm_place": "Sri Lanka",
+    "clip_geob_iso3": "LKA",
+    "clip_geob_adm": "ADM0",
+    "clip_geob_name": "Sri Lanka",
+    "pdc_raw_dir": "Meta_Event/Pop/20251129_The Flooding in Sri Lanka.zip",
+    "pdc_processed_csv": "outputs/LKA/PDC_SriLanka.csv",
+    "pdc_use_baseline_column": true,
+    "map_bbox": [
+      79.6,
+      5.8,
+      82.0,
+      9.9
+    ],
+    "map_bbox_label": "Sri Lanka",
+    "lon_range": [
+      79.6,
+      82.0
+    ],
+    "lat_range": [
+      5.8,
+      9.9
+    ]
+  },
   "LKA_Colombo": {
     "name": "Sri Lanka (Colombo)",
-    "pdc_ref_hour": 0,
+    "pdc_ref_hour": 8,
     "city_label": "Colombo",
     "clip_source": "geob",
     "worldpop": "data/raw/worldpop/lka_pop_2025_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/LKA/fb_baseline_median_h00.gpkg",
+    "meta": "data/baselines/LKA/fb_baseline_median_h08.gpkg",
     "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/LKA_relative_wealth_index.csv",
     "clip_shape": null,
     "clip_osm_place": "Colombo, Sri Lanka",
@@ -594,11 +697,11 @@
   },
   "LKA_Kandy": {
     "name": "Sri Lanka (Kandy)",
-    "pdc_ref_hour": 0,
+    "pdc_ref_hour": 8,
     "city_label": "Kandy",
     "clip_source": "geob",
     "worldpop": "data/raw/worldpop/lka_pop_2025_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/LKA/fb_baseline_median_h00.gpkg",
+    "meta": "data/baselines/LKA/fb_baseline_median_h08.gpkg",
     "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/LKA_relative_wealth_index.csv",
     "clip_shape": null,
     "clip_osm_place": "Kandy, Sri Lanka",
@@ -622,6 +725,37 @@
     "lat_range": [
       7.18,
       7.38
+    ]
+  },
+  "COL": {
+    "name": "Colombia (northwestern flooding)",
+    "pdc_ref_hour": 0,
+    "city_label": "Northwestern Colombia",
+    "worldpop": "data/raw/worldpop/col_pop_2026_CN_100m_R2025A_v1.tif",
+    "meta": "data/baselines/COL/fb_baseline_median_h00.gpkg",
+    "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/COL_relative_wealth_index.csv",
+    "clip_shape": null,
+    "clip_osm_place": "Atlántico, Colombia",
+    "clip_geob_iso3": "COL",
+    "clip_geob_adm": "ADM1",
+    "clip_geob_name": "Atlántico",
+    "pdc_raw_dir": "Meta_Event/Pop/20260203Flooding Across Northwestern Colombia.zip",
+    "pdc_processed_csv": "outputs/COL/PDC_Colombia.csv",
+    "pdc_use_baseline_column": true,
+    "map_bbox": [
+      -77.9,
+      5.9,
+      -70.5,
+      12.3
+    ],
+    "map_bbox_label": "Northwestern Colombia",
+    "lon_range": [
+      -77.9,
+      -70.5
+    ],
+    "lat_range": [
+      5.9,
+      12.3
     ]
   },
   "COL_Barranquilla": {
@@ -688,6 +822,37 @@
       10.55
     ]
   },
+  "ECU": {
+    "name": "Ecuador (Azuay flooding)",
+    "pdc_ref_hour": 0,
+    "city_label": "Azuay",
+    "worldpop": "data/raw/worldpop/ecu_pop_2026_CN_100m_R2025A_v1.tif",
+    "meta": "data/baselines/ECU/fb_baseline_median_h00.gpkg",
+    "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/ECU_relative_wealth_index.csv",
+    "clip_shape": null,
+    "clip_osm_place": "Azuay, Ecuador",
+    "clip_geob_iso3": "ECU",
+    "clip_geob_adm": "ADM1",
+    "clip_geob_name": "Azuay",
+    "pdc_raw_dir": "Meta_Event/Pop/20260312Flooding In Azuay Province, Ecuador.zip",
+    "pdc_processed_csv": "outputs/ECU/PDC_Ecuador_Azuay.csv",
+    "pdc_use_baseline_column": true,
+    "map_bbox": [
+      -81.1,
+      -5.0,
+      -75.4,
+      1.4
+    ],
+    "map_bbox_label": "Azuay / Ecuador",
+    "lon_range": [
+      -81.1,
+      -75.4
+    ],
+    "lat_range": [
+      -5.0,
+      1.4
+    ]
+  },
   "ECU_Cuenca": {
     "name": "Ecuador (Cuenca)",
     "pdc_ref_hour": 0,
@@ -752,13 +917,44 @@
       -2.0
     ]
   },
+  "ZAF": {
+    "name": "South Africa (Western Cape storm)",
+    "pdc_ref_hour": 16,
+    "city_label": "Western Cape",
+    "worldpop": "data/raw/worldpop/zaf_pop_2026_CN_100m_R2025A_v1.tif",
+    "meta": "data/baselines/ZAF/fb_baseline_median_h16.gpkg",
+    "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/ZAF_relative_wealth_index.csv",
+    "clip_shape": null,
+    "clip_osm_place": "Western Cape, South Africa",
+    "clip_geob_iso3": "ZAF",
+    "clip_geob_adm": "ADM1",
+    "clip_geob_name": "Western Cape",
+    "pdc_raw_dir": "Meta_Event/Pop/20260514_The Storm Across Western Cape, South Africa.zip",
+    "pdc_processed_csv": "outputs/ZAF/PDC_SouthAfrica_WesternCape.csv",
+    "pdc_use_baseline_column": true,
+    "map_bbox": [
+      16.8,
+      -35.0,
+      27.1,
+      -28.7
+    ],
+    "map_bbox_label": "Western Cape",
+    "lon_range": [
+      16.8,
+      27.1
+    ],
+    "lat_range": [
+      -35.0,
+      -28.7
+    ]
+  },
   "ZAF_CapeTown": {
     "name": "South Africa (Cape Town)",
-    "pdc_ref_hour": 0,
+    "pdc_ref_hour": 16,
     "city_label": "Cape Town",
     "clip_source": "geob",
     "worldpop": "data/raw/worldpop/zaf_pop_2026_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/ZAF/fb_baseline_median_h00.gpkg",
+    "meta": "data/baselines/ZAF/fb_baseline_median_h16.gpkg",
     "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/ZAF_relative_wealth_index.csv",
     "clip_shape": null,
     "clip_osm_place": "Cape Town, South Africa",
@@ -786,11 +982,11 @@
   },
   "ZAF_GardenRoute": {
     "name": "South Africa (Garden Route)",
-    "pdc_ref_hour": 0,
+    "pdc_ref_hour": 16,
     "city_label": "Garden Route",
     "clip_source": "geob",
     "worldpop": "data/raw/worldpop/zaf_pop_2026_CN_100m_R2025A_v1.tif",
-    "meta": "data/baselines/ZAF/fb_baseline_median_h00.gpkg",
+    "meta": "data/baselines/ZAF/fb_baseline_median_h16.gpkg",
     "poverty": "Meta_Event/RWI/relative-wealth-index-april-2021/ZAF_relative_wealth_index.csv",
     "clip_shape": null,
     "clip_osm_place": "George, South Africa",

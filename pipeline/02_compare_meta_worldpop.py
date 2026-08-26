@@ -115,7 +115,7 @@ def _load_context(gdf_valid, path: Path, key_col="quadkey"):
 
 
 def _detect_region(gdf):
-    """Auto-detect region from data centroid. Returns region code (PHI, KEN, ...) or 'full'."""
+    """Auto-detect region from data centroid. Returns region code (PHL, KEN, ...) or 'full'."""
     bounds = gdf.total_bounds
     clon = (bounds[0] + bounds[2]) / 2
     clat = (bounds[1] + bounds[3]) / 2
@@ -132,7 +132,7 @@ def _detect_region(gdf):
     except (ImportError, FileNotFoundError):
         pass
     if 118 <= clon <= 127 and 5 <= clat <= 20:
-        return "PHI"  # backward compat
+        return "PHL"  # backward compat
     return "full"
 
 
@@ -152,7 +152,7 @@ def _get_map_gdf(gdf, region, region_bbox=None):
 
 def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
     out_dir.mkdir(parents=True, exist_ok=True)
-    gdf = gpd.read_file(input_gpkg)
+    gdf = _read_gdf(input_gpkg)
 
     # Define shares (create if missing for backwards compatibility)
     wp_raw = gdf["worldpop_count"].values if "worldpop_count" in gdf.columns else gdf["worldpop_raw"].values
@@ -511,59 +511,62 @@ def run_comparison(input_gpkg: Path, out_dir: Path, args=None):
     ]
 
     # Basemap version (no R equivalent; choropleth is 02_allocation_log_ratio_r.png)
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        if len(gdf_map) == 0:
-            print("  Skipped basemap: no features in map extent")
-        else:
-            import contextily as ctx
-            gdf_3857 = gdf_map.to_crs("EPSG:3857")
-            # Try Sentinel-2 cloudless (EOX), fallback to Esri World Imagery
-            basemap_sources = []
-            try:
-                from xyzservices import TileProvider
-                s2_provider = TileProvider(
-                    url="https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/webmercator/{z}/{x}/{y}.jpeg",
-                    attribution="Sentinel-2 cloudless by EOX (s2maps.eu)"
-                )
-                basemap_sources.append(("Sentinel-2", s2_provider))
-            except Exception:
-                pass
-            if not basemap_sources:
+    if args is not None and getattr(args, "no_basemap", False):
+        print("  Skipping satellite basemap (--no-basemap)")
+    else:
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            if len(gdf_map) == 0:
+                print("  Skipped basemap: no features in map extent")
+            else:
+                import contextily as ctx
+                gdf_3857 = gdf_map.to_crs("EPSG:3857")
+                # Try Sentinel-2 cloudless (EOX), fallback to Esri World Imagery
+                basemap_sources = []
                 try:
-                    basemap_sources.append(("Esri World Imagery", ctx.providers.Esri.WorldImagery))
+                    from xyzservices import TileProvider
+                    s2_provider = TileProvider(
+                        url="https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/webmercator/{z}/{x}/{y}.jpeg",
+                        attribution="Sentinel-2 cloudless by EOX (s2maps.eu)"
+                    )
+                    basemap_sources.append(("Sentinel-2", s2_provider))
                 except Exception:
                     pass
-            if not basemap_sources:
-                basemap_sources.append(("OSM", ctx.providers.OpenStreetMap.Mapnik))
+                if not basemap_sources:
+                    try:
+                        basemap_sources.append(("Esri World Imagery", ctx.providers.Esri.WorldImagery))
+                    except Exception:
+                        pass
+                if not basemap_sources:
+                    basemap_sources.append(("OSM", ctx.providers.OpenStreetMap.Mapnik))
 
-            basemap_name, basemap_source = basemap_sources[0]
-            xmin, ymin, xmax, ymax = gdf_3857.total_bounds
-            for col, title, fname, vmin, vmax in map_configs:
-                v = gdf_map[col].values
-                if vmin is None or vmax is None:
-                    lim = max(abs(np.nanmin(v)), abs(np.nanmax(v)), 1e-6)
-                    vmin, vmax = -lim, lim
-                fig, ax = plt.subplots(figsize=(8, 8))
-                ax.set_xlim(xmin, xmax)
-                ax.set_ylim(ymin, ymax)
-                ax.set_aspect("equal")
-                ctx.add_basemap(ax, source=basemap_source, crs=gdf_3857.crs, zoom=12, alpha=0.9)
-                gdf_3857.plot(ax=ax, column=col, legend=True, cmap="RdBu_r", legend_kwds={"shrink": 0.6},
-                             vmin=vmin, vmax=vmax, alpha=0.65, edgecolor="white", linewidth=0.3)
-                ax.set_title(f"{title} ({basemap_name} basemap)")
-                ax.set_axis_off()
-                plt.tight_layout()
-                basemap_fname = fname.replace(".png", "_basemap.png")
-                plt.savefig(out_dir / basemap_fname, dpi=150, bbox_inches="tight")
-                plt.close()
-            print(f"  Saved basemap versions: *_basemap.png ({basemap_name})")
-    except ImportError:
-        print("  (Install contextily for basemap versions: pip install contextily)")
-    except Exception as e:
-        print(f"  (Basemap failed: {e})")
+                basemap_name, basemap_source = basemap_sources[0]
+                xmin, ymin, xmax, ymax = gdf_3857.total_bounds
+                for col, title, fname, vmin, vmax in map_configs:
+                    v = gdf_map[col].values
+                    if vmin is None or vmax is None:
+                        lim = max(abs(np.nanmin(v)), abs(np.nanmax(v)), 1e-6)
+                        vmin, vmax = -lim, lim
+                    fig, ax = plt.subplots(figsize=(8, 8))
+                    ax.set_xlim(xmin, xmax)
+                    ax.set_ylim(ymin, ymax)
+                    ax.set_aspect("equal")
+                    ctx.add_basemap(ax, source=basemap_source, crs=gdf_3857.crs, zoom=12, alpha=0.9)
+                    gdf_3857.plot(ax=ax, column=col, legend=True, cmap="RdBu_r", legend_kwds={"shrink": 0.6},
+                                 vmin=vmin, vmax=vmax, alpha=0.65, edgecolor="white", linewidth=0.3)
+                    ax.set_title(f"{title} ({basemap_name} basemap)")
+                    ax.set_axis_off()
+                    plt.tight_layout()
+                    basemap_fname = fname.replace(".png", "_basemap.png")
+                    plt.savefig(out_dir / basemap_fname, dpi=150, bbox_inches="tight")
+                    plt.close()
+                print(f"  Saved basemap versions: *_basemap.png ({basemap_name})")
+        except ImportError:
+            print("  (Install contextily for basemap versions: pip install contextily)")
+        except Exception as e:
+            print(f"  (Basemap failed: {e})")
 
     # Save gdf with residual for downstream use
     out_gpkg = out_dir / "harmonised_with_residual.gpkg"
@@ -742,27 +745,50 @@ def run_contextual_test(gdf_valid, context_col, label):
 
 def parse_args():
     p = argparse.ArgumentParser(description="Compare Meta and WorldPop (post-harmonisation)")
-    p.add_argument("-i", "--input", type=Path, default=None, help="01 harmonised GPKG (default: from --region or outputs/01/)")
+    p.add_argument("-i", "--input", type=Path, default=None, help="01 harmonised GPKG (default: from --region/--footprint or outputs/01/)")
     p.add_argument("-o", "--output-dir", type=Path, default=None, help="Output root (default: outputs/ or outputs/{region}/)")
     p.add_argument("--region", type=str, default=None,
-                   help="Region code from config (PHI, KEN, MEX). Sets I/O paths and map zoom. Auto-detect if not set.")
-    # p.add_argument("--normalize", action="store_true", default=True, help="Global-scaling: add scaled_log_ratio, scaled_relative (default: True)")
-    # p.add_argument("--no-normalize", dest="normalize", action="store_false", help="Skip global-scaling normalization")
+                   help="City region from config. Sets I/O paths and map zoom.")
+    import region_config
+    region_config.add_footprint_arg(p)
     p.add_argument("--informal", type=Path, default=None, help="GPKG/CSV with quadkey + informal (0/1)")
     p.add_argument("--rural", type=Path, default=None, help="GPKG/CSV with quadkey + rural (0/1)")
     p.add_argument("--nightlight", type=Path, default=None, help="GPKG/CSV with quadkey + nightlight value")
+    p.add_argument("--no-basemap", action="store_true",
+                   help="Skip satellite-tile residual basemap (choropleth still from 02_plots.R).")
     return p.parse_args()
+
+
+def _read_gdf(path: Path):
+    path = Path(path)
+    if path.suffix.lower() == ".parquet":
+        gdf = gpd.read_parquet(path)
+        if gdf.crs is None:
+            gdf = gdf.set_crs("EPSG:4326")
+        return gdf
+    return gpd.read_file(path)
 
 
 def main():
     args = parse_args()
+    import region_config
 
-    # Resolve input/output from --region
-    if args.region:
+    if args.region and args.footprint:
+        raise SystemExit("Use --region (city) or --footprint (event AOI), not both.")
+
+    if args.footprint:
+        code = region_config.require_footprint(args.footprint)
+        cfg = region_config.get_footprint_config(code)
+        args.region = code
+        args.region_bbox = None
+        args.region_label = cfg.get("name") or code
+        if args.input is None:
+            args.input = region_config.footprint_harmonise_input(code)
+        out_dir = region_config.footprint_step_paths(code, "02")
+    elif args.region:
         try:
-            import region_config
+            args.region = region_config.require_city_region(args.region)
             cfg = region_config.get_region_config(args.region)
-            # When a city clip is applied in 01: use data extent for maps
             import clip_utils
             args.region_bbox = None if clip_utils.has_clip_boundary(cfg) else cfg.get("map_bbox")
             args.region_label = cfg.get("map_bbox_label") or cfg.get("name") or args.region

@@ -11,7 +11,7 @@
 
 project_root <- "/Users/wenlanzhang/PycharmProjects/Residential_population2"
 config_path <- file.path(project_root, "config", "regions.json")
-GLOBAL_KEYS <- c("data_root", "poverty_source", "poverty_grdi", "clip_source")
+GLOBAL_KEYS <- c("data_root", "poverty_source", "poverty_grdi", "clip_source", "footprints", "ghsl_smod", "ghsl_ucdb")
 
 #' Load regions.json. Returns list of region configs.
 load_regions <- function() {
@@ -29,7 +29,7 @@ region_codes <- function(regions = NULL) {
   setdiff(names(regions), GLOBAL_KEYS)
 }
 
-#' Get map_bbox for region code (PHI, KEN, MEX). Returns c(xmin, ymin, xmax, ymax) or NULL.
+#' Get map_bbox for region code (PHL_CagayandeOroCity, KEN_Nairobi, MEX). Returns c(xmin, ymin, xmax, ymax) or NULL.
 get_map_bbox <- function(region_code) {
   regions <- load_regions()
   if (is.null(regions) || !region_code %in% region_codes(regions)) return(NULL)
@@ -39,21 +39,13 @@ get_map_bbox <- function(region_code) {
 }
 
 #' Infer region code from a pipeline artifact path
-#' (outputs|figure|data/processed)/COUNTRY/CITY_OR_full/...
+#' (outputs|figure|data/processed)/city/COUNTRY/CITY/...
 get_region_from_path <- function(path) {
   region_from_artifact_path(path)
 }
 
 layout_parts <- function(code) {
   country <- sub("_.*$", "", code)
-  regions <- load_regions()
-  cfg <- if (!is.null(regions) && code %in% names(regions)) regions[[code]] else NULL
-  clip <- if (!is.null(cfg)) cfg$clip_shape else NULL
-  no_clip <- is.null(clip) || (is.character(clip) && !nzchar(clip))
-  if (!grepl("_", code) && no_clip && !is.null(cfg)) {
-    return(list(country = country, place = "full"))
-  }
-  if (identical(code, "MEX")) return(list(country = "MEX", place = "MexicoCity"))
   if (grepl("_", code)) {
     return(list(country = country, place = sub("^[^_]+_", "", code)))
   }
@@ -61,8 +53,6 @@ layout_parts <- function(code) {
 }
 
 region_from_layout <- function(country, place) {
-  if (identical(place, "full")) return(country)
-  if (identical(country, "MEX") && identical(place, "MexicoCity")) return("MEX")
   if (identical(place, country)) return(country)
   paste0(country, "_", place)
 }
@@ -70,60 +60,141 @@ region_from_layout <- function(country, place) {
 region_from_artifact_path <- function(path) {
   if (is.null(path) || !nzchar(path)) return(NULL)
   parts <- strsplit(path, "[/\\\\]")[[1]]
+  reserved <- c("city", "footprints", "cross-city", "cross-country", "paper", "_archive", "_snapshots", "qa", "meta", "geographies")
   for (root in c("outputs", "figure", "processed")) {
     idx <- match(root, parts)
-    if (!is.na(idx) && (idx + 2) <= length(parts)) {
+    if (is.na(idx) || (idx + 1) > length(parts)) next
+    nxt <- parts[[idx + 1]]
+    if (identical(nxt, "city") && (idx + 3) <= length(parts)) {
+      country <- parts[[idx + 2]]
+      place <- parts[[idx + 3]]
+    } else if (identical(nxt, "footprints") && (idx + 2) <= length(parts)) {
+      code <- parts[[idx + 2]]
+      if (!code %in% c("qa", "meta")) return(code)
+      next
+    } else if (nxt %in% reserved) {
+      next
+    } else if ((idx + 2) <= length(parts)) {
       country <- parts[[idx + 1]]
       place <- parts[[idx + 2]]
-      if (place %in% c("01", "02", "cross-city")) next
-      return(region_from_layout(country, place))
+    } else {
+      next
     }
+    if (place %in% c("01", "02", "cross-city") || place %in% reserved) next
+    return(region_from_layout(country, place))
   }
   NULL
 }
 
 csv_dir <- function(code, step = NULL) {
   p <- layout_parts(code)
-  d <- file.path(project_root, "outputs", p$country, p$place)
+  d <- file.path(project_root, "outputs", "city", p$country, p$place)
   if (!is.null(step)) d <- file.path(d, step)
   d
 }
 
 figure_dir <- function(code, step = NULL) {
   p <- layout_parts(code)
-  d <- file.path(project_root, "figure", p$country, p$place)
+  d <- file.path(project_root, "figure", "city", p$country, p$place)
   if (!is.null(step)) d <- file.path(d, step)
   d
 }
 
 geo_dir <- function(code, step = NULL) {
   p <- layout_parts(code)
-  d <- file.path(project_root, "data", "processed", p$country, p$place)
+  d <- file.path(project_root, "data", "processed", "city", p$country, p$place)
   if (!is.null(step)) d <- file.path(d, step)
   d
 }
 
 find_artifact <- function(code, step, filename) {
   ext <- tolower(tools::file_ext(filename))
+  p <- layout_parts(code)
   if (ext %in% c("gpkg", "shp", "geojson", "tif", "tiff")) {
-    new <- file.path(geo_dir(code, step), filename)
+    candidates <- c(
+      file.path(geo_dir(code, step), filename),
+      file.path(project_root, "data", "processed", p$country, p$place, step, filename)
+    )
   } else if (ext %in% c("png", "pdf", "svg", "jpg", "jpeg")) {
-    new <- file.path(figure_dir(code, step), filename)
+    candidates <- c(
+      file.path(figure_dir(code, step), filename),
+      file.path(project_root, "figure", p$country, p$place, step, filename)
+    )
   } else {
-    new <- file.path(csv_dir(code, step), filename)
+    candidates <- c(
+      file.path(csv_dir(code, step), filename),
+      file.path(project_root, "outputs", p$country, p$place, step, filename)
+    )
   }
-  if (file.exists(new)) return(new)
-  old <- file.path(project_root, "outputs", code, step, filename)
-  if (file.exists(old)) return(old)
+  candidates <- c(candidates, file.path(project_root, "outputs", code, step, filename))
+  for (path in candidates) {
+    if (file.exists(path)) return(path)
+  }
   NULL
 }
 
-#' Figure folder for a plot script. Prefer --region, then infer from -i path.
-resolve_plot_out_dir <- function(region_arg, in_path, step, o_arg = NULL) {
+footprint_figure_dir <- function(code, step = NULL) {
+  d <- file.path(project_root, "figure", "footprints", code)
+  if (!is.null(step)) d <- file.path(d, step)
+  d
+}
+
+footprint_csv_dir <- function(code, step = NULL) {
+  d <- file.path(project_root, "outputs", "footprints", code)
+  if (!is.null(step)) d <- file.path(d, step)
+  d
+}
+
+footprint_geo_dir <- function(code, step = NULL) {
+  d <- file.path(project_root, "data", "processed", "footprints", code)
+  if (!is.null(step)) d <- file.path(d, step)
+  d
+}
+
+#' Footprint artifacts: outputs/figure/data/processed/footprints/{CODE}/{step}/.
+find_footprint_artifact <- function(code, step, filename) {
+  ext <- tolower(tools::file_ext(filename))
+  if (ext %in% c("gpkg", "shp", "geojson", "tif", "tiff")) {
+    candidates <- c(
+      file.path(footprint_geo_dir(code, step), filename),
+      file.path(project_root, "outputs", "footprints", code, step, filename)
+    )
+  } else if (ext %in% c("png", "pdf", "svg", "jpg", "jpeg")) {
+    candidates <- c(file.path(footprint_figure_dir(code, step), filename))
+  } else {
+    candidates <- c(file.path(footprint_csv_dir(code, step), filename))
+  }
+  for (path in candidates) {
+    if (file.exists(path)) return(path)
+  }
+  NULL
+}
+
+footprint_code_from_path <- function(path) {
+  if (is.null(path) || !nzchar(path)) return(NULL)
+  parts <- strsplit(path, "[/\\\\]")[[1]]
+  idx <- match("footprints", parts)
+  if (is.na(idx) || (idx + 1) > length(parts)) return(NULL)
+  code <- parts[[idx + 1]]
+  if (code %in% c("qa", "meta")) return(NULL)
+  code
+}
+
+#' Figure folder for a plot script. Prefer --footprint / --region, then infer from -i path.
+resolve_plot_out_dir <- function(region_arg, in_path, step, o_arg = NULL, footprint_arg = NULL) {
   if (!is.null(o_arg) && nzchar(o_arg)) return(o_arg)
+  if (!is.null(footprint_arg) && nzchar(footprint_arg)) {
+    return(footprint_figure_dir(footprint_arg, step))
+  }
+  fp <- footprint_code_from_path(in_path)
+  if (!is.null(fp)) return(footprint_figure_dir(fp, step))
   if (!is.null(region_arg) && nzchar(region_arg)) return(figure_dir(region_arg, step))
   inf <- region_from_artifact_path(in_path)
-  if (!is.null(inf)) return(figure_dir(inf, step))
+  if (!is.null(inf)) {
+    fp2 <- footprint_code_from_path(in_path)
+    if (!is.null(fp2)) return(footprint_figure_dir(fp2, step))
+    return(figure_dir(inf, step))
+  }
   if (!is.null(in_path) && dir.exists(in_path)) return(in_path)
   if (!is.null(in_path)) return(dirname(in_path))
   file.path(project_root, "figure")
@@ -152,7 +223,18 @@ get_region_from_data <- function(gdf) {
 
 #' Get map_bbox: first from region arg, then from path, then from data. Returns named vector or NULL.
 #' When a city clip is configured: uses data extent (data is already clipped) instead of map_bbox.
-get_map_bbox_for_plot <- function(region_arg = NULL, input_path = NULL, gdf = NULL) {
+get_map_bbox_for_plot <- function(region_arg = NULL, input_path = NULL, gdf = NULL, footprint_arg = NULL) {
+  bbox_from_gdf <- function(x) {
+    bb <- sf::st_bbox(x)
+    stats::setNames(as.numeric(bb), c("xmin", "ymin", "xmax", "ymax"))
+  }
+  if (!is.null(footprint_arg) && nzchar(footprint_arg) && !is.null(gdf) && inherits(gdf, "sf") && nrow(gdf) > 0) {
+    return(bbox_from_gdf(gdf))
+  }
+  if (!is.null(input_path) && grepl("footprints", input_path, fixed = TRUE) &&
+      !is.null(gdf) && inherits(gdf, "sf") && nrow(gdf) > 0) {
+    return(bbox_from_gdf(gdf))
+  }
   regions <- load_regions()
   reg <- NULL
   if (!is.null(region_arg) && nzchar(region_arg)) reg <- toupper(region_arg)
@@ -223,7 +305,7 @@ clip_gdf_to_bbox <- function(gdf, bbox) {
 ARMYROSE <- c("#798234", "#A3AD62", "#D0D3A2", "#FDFBE4", "#F0C6C3", "#DF91A3", "#D46780")
 ARMYROSE_CAT <- ARMYROSE[c(1, 2, 3, 5, 6, 7)]
 COUNTRY_LABEL <- c(
-  PHI = "Philippines", KEN = "Kenya", MEX = "Mexico", IDN = "Indonesia",
+  PHL = "Philippines", KEN = "Kenya", MEX = "Mexico", IDN = "Indonesia",
   LKA = "Sri Lanka", COL = "Colombia", ECU = "Ecuador", ZAF = "South Africa"
 )
 ARMYROSE_COUNTRY <- c(

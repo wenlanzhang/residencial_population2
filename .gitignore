@@ -223,6 +223,10 @@ data/raw/dataverse_files.zip
 # WorldPop rasters (place under data/raw/worldpop/; do not commit)
 data/raw/worldpop/*.tif
 
+# GHSL settlement layers (place under data/raw/; do not commit)
+data/raw/ghsl/
+data/raw/GHS_STAT_UCDB2015MT_GLOBE_R2019A/
+
 # Downloaded OSM / geoBoundaries clip cache
 data/raw/boundaries/cache/
 

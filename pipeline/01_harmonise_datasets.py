@@ -11,12 +11,18 @@ Usage:
   python pipeline/01_harmonise_datasets.py --worldpop /path/to.tif --meta /path/to.gpkg
   python pipeline/01_harmonise_datasets.py --region KEN_Nairobi
   python pipeline/01_harmonise_datasets.py --region KEN_Nairobi --poverty-source rwi
+  python pipeline/01_harmonise_datasets.py --footprint KEN
   python pipeline/01_harmonise_datasets.py --worldpop ... --meta ... --poverty /path/to/poverty.tif
   python pipeline/01_harmonise_datasets.py --filter-by meta --filter-min 50   # keep quadkeys with meta_baseline > 50
   python pipeline/01_harmonise_datasets.py --filter-by worldpop --filter-min 50   # keep quadkeys with worldpop_count > 50
   python pipeline/01_harmonise_datasets.py --region KEN_Nairobi --clip-source osm
   python pipeline/01_harmonise_datasets.py --region KEN_Nairobi --clip-source geob
   python pipeline/01_harmonise_datasets.py --filter-by both --filter-min 50   # keep quadkeys where BOTH meta and worldpop >= 50
+
+City mode (--region) clips to a city boundary and writes the city 01 GPKG.
+Footprint mode (--footprint) keeps the Meta event AOI with no extra clip,
+writes outputs/footprints/{CODE}/ so it does not overwrite outputs/city/, and
+caches data/processed/footprints/{CODE}_aligned.parquet. Use one or the other, not both.
 """
 
 # python pipeline/01_harmonise_datasets.py --filter-by both --filter-min 30
@@ -46,7 +52,7 @@ except ImportError:
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASE = PROJECT_ROOT / "data" / "raw"  # WorldPop, Poverty rasters; put files here or override with CLI
 DEFAULT_WORLDPOP = PROJECT_ROOT / "data" / "raw" / "worldpop" / "phl_pop_2026_CN_100m_R2025A_v1.tif"
-DEFAULT_META = PROJECT_ROOT / "outputs" / "fb_baseline_median_PHI.gpkg"  # from build_fb_baseline_median.py
+DEFAULT_META = PROJECT_ROOT / "outputs" / "fb_baseline_median_PHL.gpkg"  # from build_fb_baseline_median.py
 DEFAULT_POVERTY = PROJECT_ROOT / "data" / "raw" / "povmap-grdi-v1-10.tif"
 
 
@@ -77,9 +83,38 @@ def filter_quadkeys(gdf, by=None, min_val=50):
 def parse_args():
     p = argparse.ArgumentParser(description="Harmonise rasters to quadkey grid")
     p.add_argument("--region", type=str, default=None,
-                   help="Region code from config/regions.json (PHI, KEN, MEX). Sets worldpop, meta, poverty, output paths.")
+                   help="City region from config/regions.json (e.g. KEN_Nairobi, or used by ./run --region KEN).")
+    p.add_argument(
+        "--footprint",
+        type=str,
+        default=None,
+        help="Event-footprint country (same countries as ./run --region). "
+             "Philippines is PHL. No city clip. One country; every footprint treated equally.",
+    )
     p.add_argument("--ref-hour", type=int, default=None, choices=[0, 8, 16], metavar="HOUR",
                    help="Reference hour (0, 8, or 16). Uses outputs/{region}/fb_baseline_median_h{HOUR:02d}.gpkg. Overrides config meta path.")
+    p.add_argument(
+        "--baseline-method",
+        type=str,
+        default="n_baseline",
+        choices=["n_baseline", "shift"],
+        help="Meta GPKG method: n_baseline (default, column in the PDC CSV) or shift (7-day lag). "
+             "Applies to both --region (city) and --footprint.",
+    )
+    p.add_argument(
+        "--worldpop-method",
+        type=str,
+        default=None,
+        choices=["centre", "fractional", "all_touched"],
+        help="WorldPop aggregation (centre, fractional, all_touched). "
+             "Footprint default: centre. City default: all_touched unless this is set.",
+    )
+    p.add_argument(
+        "--parquet",
+        type=Path,
+        default=None,
+        help="Override GeoParquet cache (footprint default: data/processed/footprints/{CODE}_aligned.parquet).",
+    )
     p.add_argument("--worldpop", type=Path, default=None, help="Override: WorldPop raster path")
     p.add_argument("--meta", type=Path, default=None, help="Override: Meta baseline GPKG path")
     p.add_argument("--poverty", type=Path, default=None, help="Override: Poverty raster or RWI CSV path")
@@ -103,7 +138,7 @@ def parse_args():
     p.add_argument("--workers", type=int, default=1,
                    help="Parallel workers for zonal_stats (default: 1). Use 4+ for large grids.")
     p.add_argument("--clip-shape", type=Path, default=None,
-                   help="Clip to study area: path to .shp, .gpkg, or .geojson. Used when --clip-source local.")
+                   help="City --region only: path to .shp, .gpkg, or .geojson when --clip-source local.")
     p.add_argument(
         "--clip-source",
         type=str,
@@ -125,20 +160,149 @@ def parse_args():
     return p.parse_args()
 
 
+def run_footprint(args):
+    """
+    Event-footprint 01: Meta event AOI as published, no extra clip.
+    Writes outputs/footprints/{CODE}/01/ and data/processed/footprints/{CODE}_aligned.parquet.
+    """
+    from align_utils import (
+        add_shares_and_ratios,
+        aggregate_poverty,
+        aggregate_worldpop,
+        filter_quadkeys as _filter_quadkeys,
+        print_harmonisation_checks,
+        rename_meta_baseline,
+        save_aligned,
+    )
+    import region_config
+
+    if (
+        args.clip_shape is not None
+        or args.clip_source is not None
+        or args.clip_refresh
+        or args.clip_osm_place
+        or args.clip_geob_iso3
+        or args.clip_geob_adm
+        or args.clip_geob_name
+    ):
+        raise ValueError(
+            "Footprint mode keeps the Meta event AOI. City clips belong to --region, not --footprint."
+        )
+
+    cfg = region_config.get_footprint_config(args.footprint)
+    code = args.footprint
+    worldpop = args.worldpop or cfg["worldpop"]
+    if args.meta is not None:
+        meta_path = args.meta
+    else:
+        meta_path = region_config.get_meta_baseline_path(
+            cfg, code, ref_hour=args.ref_hour, baseline_method=args.baseline_method
+        )
+    if args.no_poverty:
+        poverty_path, poverty_source = None, None
+    elif args.poverty is not None:
+        poverty_path = args.poverty
+        poverty_source = args.poverty_source or (
+            "rwi" if Path(poverty_path).suffix.lower() == ".csv" else "grdi"
+        )
+    else:
+        poverty_source = args.poverty_source or cfg.get("poverty_source") or "grdi"
+        poverty_path = region_config.resolve_poverty_path(cfg, poverty_source)
+
+    out_dir = region_config.get_footprint_output_dir(code, "01")
+    out_gpkg = args.output or (out_dir / "harmonised_meta_worldpop.gpkg")
+    out_parquet = args.parquet or region_config.get_aligned_parquet(code)
+
+    print(f"Footprint: {code} ({cfg.get('name', code)})")
+    print(f"  Meta baseline: {meta_path}")
+    if args.baseline_method:
+        print(f"  Baseline method: {args.baseline_method}")
+    print("  Processing extent: Meta availability (no extra clip)")
+    if not args.no_poverty:
+        print(f"Poverty source: {poverty_source} → {poverty_path}")
+
+    worldpop_p, meta_p = Path(worldpop), Path(meta_path)
+    if not worldpop_p.exists():
+        raise FileNotFoundError(f"WorldPop raster not found: {worldpop}")
+    if not meta_p.exists():
+        raise FileNotFoundError(
+            f"Meta baseline GPKG not found: {meta_path}\n"
+            f"  Build it with: python data_prep/build_fb_baseline_median.py --region {code}"
+            + (f" --baseline-method {args.baseline_method}" if args.baseline_method else "")
+        )
+    if not args.no_poverty:
+        if poverty_path is None:
+            raise FileNotFoundError(
+                "Poverty data is required. Pass --poverty or use --no-poverty to skip."
+            )
+        pov_p = Path(poverty_path)
+        if "/path/to" in str(poverty_path).lower() or not pov_p.exists():
+            raise FileNotFoundError(f"Poverty data required but missing: {poverty_path}")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print("Loading datasets...")
+    meta = gpd.read_file(meta_path)
+    print(f"  Meta: {len(meta)} quadkeys, CRS={meta.crs}")
+    if meta.crs != "EPSG:4326":
+        meta = meta.to_crs("EPSG:4326")
+        print("  Meta reprojected to EPSG:4326")
+
+    workers = getattr(args, "workers", 1)
+    method = args.worldpop_method or "centre"
+    meta = aggregate_worldpop(meta, worldpop, workers=workers, method=method)
+    meta = rename_meta_baseline(meta)
+    print_harmonisation_checks(meta, region=code)
+
+    if poverty_path and Path(poverty_path).exists():
+        meta = aggregate_poverty(
+            meta,
+            poverty_path,
+            poverty_source=poverty_source,
+            poverty_nodata=args.poverty_nodata,
+            workers=workers,
+        )
+    elif poverty_path is not None:
+        print("\n*** Poverty SKIPPED (file missing) — output will NOT include poverty_mean ***")
+
+    filter_by = args.filter_by
+    if args.min_meta is not None:
+        filter_by = "meta"
+        args.filter_min = args.min_meta
+        print("  Note: --min-meta is deprecated, use --filter-by meta --filter-min N")
+    if filter_by is not None:
+        before = len(meta)
+        meta = _filter_quadkeys(meta, by=filter_by, min_val=args.filter_min)
+        print(f"  Kept {len(meta)} / {before} quadkeys (dropped {before - len(meta)})")
+
+    meta = add_shares_and_ratios(meta)
+    print("\n--- Harmonised summary ---")
+    cols = ["worldpop_count", "meta_baseline", "worldpop_share", "meta_share"]
+    if "poverty_mean" in meta.columns:
+        cols.append("poverty_mean")
+    print(meta[[c for c in cols if c in meta.columns]].describe())
+    save_aligned(meta, out_gpkg=out_gpkg, out_parquet=out_parquet)
+    return meta
+
+
 def main():
     args = parse_args()
+    if args.region and args.footprint:
+        raise ValueError("Use either --region (city) or --footprint (event Meta AOI), not both.")
+    if args.footprint:
+        return run_footprint(args)
 
     # Resolve paths from --region config or defaults
     if args.region:
         import region_config
+        args.region = region_config.require_city_region(args.region)
         cfg = region_config.get_region_config(args.region)
         worldpop = args.worldpop or cfg["worldpop"]
         if args.meta is not None:
             meta_path = args.meta
-        elif args.ref_hour is not None:
-            meta_path = region_config.baseline_path(args.region, args.ref_hour)
         else:
-            meta_path = cfg["meta"]
+            meta_path = region_config.get_meta_baseline_path(
+                cfg, args.region, ref_hour=args.ref_hour, baseline_method=args.baseline_method
+            )
         if args.no_poverty:
             poverty_path = None
             poverty_source = None
@@ -279,37 +443,39 @@ def main():
     # 3. Aggregate WorldPop to Meta quadkey grid (zonal sum)
     # -------------------------------------------------------------------------
     workers = getattr(args, "workers", 1)
-    print(f"Aggregating WorldPop to Meta quadkey grid... (workers={workers})")
-    zs_kw = dict(
-        stats=["sum", "count", "min", "max", "mean"],
-        nodata=-99999.0,  # WorldPop NoData value
-        all_touched=True,  # include edge pixels
-    )
-    if workers > 1:
-        geoms = meta.geometry.tolist()
-        n = len(geoms)
-        chunk_size = max(1, (n + workers - 1) // workers)
-        chunks = [(geoms[i : i + chunk_size], str(worldpop), zs_kw) for i in range(0, n, chunk_size)]
+    if args.worldpop_method:
+        from align_utils import aggregate_worldpop
 
-        def _zonal_stats_chunk(args):
-            geoms_chunk, raster_path, kw = args
-            return zonal_stats(geoms_chunk, raster_path, **kw)
-
-        with multiprocessing.Pool(workers) as pool:
-            stats_lists = pool.map(_zonal_stats_chunk, chunks)
-        stats = list(itertools.chain.from_iterable(stats_lists))
+        meta = aggregate_worldpop(meta, worldpop, workers=workers, method=args.worldpop_method)
     else:
-        stats = zonal_stats(meta.geometry, str(worldpop), **zs_kw)
+        print(f"Aggregating WorldPop to Meta quadkey grid... (workers={workers})")
+        zs_kw = dict(
+            stats=["sum", "count", "min", "max", "mean"],
+            nodata=-99999.0,  # WorldPop NoData value
+            all_touched=True,  # include edge pixels
+        )
+        if workers > 1:
+            geoms = meta.geometry.tolist()
+            n = len(geoms)
+            chunk_size = max(1, (n + workers - 1) // workers)
+            chunks = [(geoms[i : i + chunk_size], str(worldpop), zs_kw) for i in range(0, n, chunk_size)]
 
-    # -------------------------------------------------------------------------
-    # 4. Join and harmonise units
-    # -------------------------------------------------------------------------
-    meta = meta.copy()
-    meta["worldpop_count"] = [s["sum"] if s["sum"] is not None else np.nan for s in stats]
-    meta["worldpop_n_pixels"] = [s["count"] if s["count"] is not None else 0 for s in stats]
-    meta["worldpop_min"] = [s["min"] if s["min"] is not None else np.nan for s in stats]
-    meta["worldpop_max"] = [s["max"] if s["max"] is not None else np.nan for s in stats]
-    meta["worldpop_mean"] = [s["mean"] if s["mean"] is not None else np.nan for s in stats]
+            def _zonal_stats_chunk(args):
+                geoms_chunk, raster_path, kw = args
+                return zonal_stats(geoms_chunk, raster_path, **kw)
+
+            with multiprocessing.Pool(workers) as pool:
+                stats_lists = pool.map(_zonal_stats_chunk, chunks)
+            stats = list(itertools.chain.from_iterable(stats_lists))
+        else:
+            stats = zonal_stats(meta.geometry, str(worldpop), **zs_kw)
+
+        meta = meta.copy()
+        meta["worldpop_count"] = [s["sum"] if s["sum"] is not None else np.nan for s in stats]
+        meta["worldpop_n_pixels"] = [s["count"] if s["count"] is not None else 0 for s in stats]
+        meta["worldpop_min"] = [s["min"] if s["min"] is not None else np.nan for s in stats]
+        meta["worldpop_max"] = [s["max"] if s["max"] is not None else np.nan for s in stats]
+        meta["worldpop_mean"] = [s["mean"] if s["mean"] is not None else np.nan for s in stats]
 
     # Rename Meta baseline column (auto-detect first numeric non-geometry column)
     meta_col = next((c for c in meta.columns if c not in ("geometry", "quadkey") and pd.api.types.is_numeric_dtype(meta[c])), None)
