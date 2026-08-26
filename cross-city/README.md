@@ -8,15 +8,20 @@ Horizontal run across **all selected study cities** that have data: steps 01, 02
 
 | Unit | How you get it | Folder |
 |------|----------------|--------|
-| Selected **city** (clipped) | default | `outputs/{COUNTRY}/{city}/`, `figure/{COUNTRY}/{city}/` |
-| Country **full** (all cells in the Meta extract) | `--include-full` | `outputs/{COUNTRY}/full/`, `figure/{COUNTRY}/full/` |
+| Selected **city** (clipped) | default | `outputs/city/{COUNTRY}/{city}/`, `figure/city/{COUNTRY}/{city}/` |
+| Meta event **footprint** | `./run --footprint COUNTRY` | `outputs/footprints/{CODE}/` |
 
 Cross-city aggregation writes:
 
 - tables → `outputs/cross-city/`
 - figures → `figure/cross-city/`
 
-Cities without step-02/03c outputs are skipped with a warning.
+Cross-country aggregation (one row per footprint) writes:
+
+- tables → `outputs/cross-country/`
+- figures → `figure/cross-country/`
+
+Cities or countries without step-02/03c outputs are skipped with a warning.
 
 ## Output tables
 
@@ -30,7 +35,7 @@ Columns include **Country**, **City**, **Region** (config code), then:
 - **N cells (total)** / **Total WorldPop** / **Total Meta (FB)** / **Total area (km²)**: Step **01** harmonised grid (all quadkeys, **including zeros**)
 - **N cells (valid)** / **Valid WorldPop** / **Valid Meta (FB)** / **Valid area (km²)**: Step **02** analysis grid (both shares > 0; zeros excluded)
 - **Valid WorldPop (% of total)** / **Valid Meta (% of total)**: Valid-cell population ÷ harmonised total (step 01) × 100 for each source
-- **Total area (% of city)**: Total harmonised grid area ÷ city boundary × 100 (the polygon used in step 01: local `clip_shape`, OSM, or geoBoundaries). Blank for unclipped extracts.
+- **Total area (% of city)**: Total harmonised grid area ÷ city boundary × 100 (the polygon used in step 01: local `clip_shape`, OSM, or geoBoundaries).
 - **Valid area (% of harmonised grid)**: Valid area ÷ total harmonised area × 100
 - **Valid area (% of city)**: Valid area ÷ city boundary × 100
 - **Spearman ρ / Pearson r**: Correlation of log(meta_share) vs log(wp_share) on the valid grid
@@ -61,10 +66,7 @@ python cross-city/run_cross_city_table.py --aggregate-only
 python cross-city/run_cross_city_table.py
 
 # One or more countries (all selected cities in each)
-python cross-city/run_cross_city_table.py --regions PHI,KEN,MEX
-
-# Also add unclipped extracts (IDN/LKA/COL/ECU/ZAF → Country / full)
-python cross-city/run_cross_city_table.py --aggregate-only --include-full
+python cross-city/run_cross_city_table.py --regions PHL,KEN,MEX
 
 # With reference hour (uses fb_baseline_median_h08.gpkg). Build baseline first with same hour.
 python cross-city/run_cross_city_table.py --ref-hour 8
@@ -85,9 +87,9 @@ Reads `outputs/cross-city/Table1_*.csv` (and Table 2 / rank-instability when pre
 |------|------|
 | **02_spatial_agreement.png** | 02 |
 | **02_spearman.png** | 02 |
-| **02_concentration_ratio.png** | 02 |
+| **02_concentration_ratio.png** | 02 (95% bootstrap CI error bars; `outputs/cross-city/Table_concentration_ratio_ci.csv`) |
 | **02_lorenz_curves.png** | 02 |
-| **02_residual_maps.png** | 02 (combined panel; per-city maps are `figure/{COUNTRY}/{city}/02/02_allocation_log_ratio_r.png`) |
+| **02_residual_maps.png** | 02 (combined panel; per-city maps are `figure/city/{COUNTRY}/{city}/02/02_allocation_log_ratio_r.png`) |
 | **03b_hotspot_jaccard.png** | 03b |
 | **03c_sem_forest.png** | 03c |
 | **03c_spearman_vs_tau.png** | 03c |
@@ -96,7 +98,20 @@ Reads `outputs/cross-city/Table1_*.csv` (and Table 2 / rank-instability when pre
 
 Also writes `outputs/cross-city/Table_sem_tau_all_cities.csv`. Requires: sf, ggplot2, dplyr, tidyr, patchwork.
 
-Unclipped extracts are included when Table 1 was built with `--include-full`.
+## Cross-country (Meta event footprints)
+
+One row per country AOI from `./run --footprint COUNTRY`. Same Table 1 / Table 2 / rank-instability metrics as cross-city, but **without** city-boundary area shares (the unit is the event footprint, not a city clip). Mexico 03c/SEM is skipped if that step did not finish.
+
+```bash
+python cross-city/run_cross_country_table.py
+python cross-city/run_cross_country_table.py --footprints PHL,KEN,MEX
+Rscript cross-city/figures_cross_country.R
+```
+
+- tables → `outputs/cross-country/`
+- figures → `figure/cross-country/`
+
+Same figure names as cross-city **except** there is no `02_residual_maps.png`. SEM forest CSV is `Table_sem_tau_all_countries.csv`. `02_concentration_ratio.png` includes 95% bootstrap CI error bars (`Table_concentration_ratio_ci.csv`).
 
 ## Prerequisites
 
@@ -105,4 +120,4 @@ Unclipped extracts are included when Table 1 was built with `--include-full`.
   python data_prep/build_fb_baseline_median.py --all
   # Or with reference hour: python data_prep/build_fb_baseline_median.py --all --ref-hour 8
   ```
-- Per-city step 01 / 02 / 03c outputs under `outputs/{COUNTRY}/{city}/` (and GPKGs under `data/processed/...`). Use `./run --region COUNTRY` or run the aggregator without `--aggregate-only`.
+- Per-city step 01 / 02 / 03c outputs under `outputs/city/{COUNTRY}/{city}/` (and GPKGs under `data/processed/city/...`). Use `./run --region COUNTRY` or run the aggregator without `--aggregate-only`.

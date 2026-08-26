@@ -45,6 +45,7 @@ def parse_args():
     p.add_argument("-i", "--input", type=Path, default=DEFAULT_INPUT, help="02_harmonised_with_residual.gpkg")
     p.add_argument("-o", "--output-dir", type=Path, default=PROJECT_ROOT / "outputs", help="outputs root")
     p.add_argument("--region", type=str, default=None)
+    region_config.add_footprint_arg(p)
     p.add_argument("--project-crs", type=str, default="EPSG:32737", help="CRS for distances")
     return p.parse_args()
 
@@ -55,7 +56,10 @@ def main():
     if not args.input.exists():
         raise FileNotFoundError(f"Missing input: {args.input}. Run step 02 first.")
 
-    out_dir = region_config.resolve_step_paths(args.region, OUT_SUBDIR, args.output_dir, args.input)
+    out_dir = region_config.resolve_step_paths(
+        args.region, OUT_SUBDIR, args.output_dir, args.input,
+        footprint=getattr(args, "footprint", None),
+    )
 
     gdf = poverty_utils.load_and_prepare_gdf(
         args.input, args.project_crs, residual_col="allocation_residual"

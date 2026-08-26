@@ -18,7 +18,7 @@ Counterfactuals (allocation-only; neither source is asserted as census truth):
 Usage:
   python pipeline/04_impact.py --region KEN_Nairobi
   python pipeline/04_impact.py -i outputs/02/harmonised_with_residual.gpkg -o outputs
-  python pipeline/04_impact.py --region MEX --plot-map --save-gpkg
+  python pipeline/04_impact.py --region MEX_MexicoCity --plot-map --save-gpkg
 
 Outputs (under outputs/{REGION}/04_impact/ by default):
   Table4_impact_population_summary.csv — includes share_mass_redistribution_M (half-L1 between share vectors).
@@ -45,9 +45,17 @@ OUT_SUBDIR = "04_impact"
 
 
 def _resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:
-    if args.region:
-        import region_config
+    import region_config
 
+    if getattr(args, "region", None) and getattr(args, "footprint", None):
+        raise SystemExit("Use --region (city) or --footprint (event AOI), not both.")
+    if args.footprint:
+        code = region_config.require_footprint(args.footprint)
+        inp = region_config.footprint_geo_dir(code, "02") / "harmonised_with_residual.gpkg"
+        out_root = args.output_dir if args.output_dir is not None else region_config.footprint_csv_dir(code)
+        return inp, out_root
+    if args.region:
+        args.region = region_config.require_city_region(args.region)
         inp = region_config.geo_dir(args.region, "02") / "harmonised_with_residual.gpkg"
         out_root = args.output_dir if args.output_dir is not None else region_config.csv_dir(args.region)
         return inp, out_root
@@ -122,6 +130,8 @@ def parse_args():
     p.add_argument("-i", "--input", type=Path, default=None, help="harmonised_with_residual.gpkg from step 02")
     p.add_argument("-o", "--output-dir", type=Path, default=None, help="Region output root (default: outputs or outputs/{region})")
     p.add_argument("--region", type=str, default=None, help="Region code; sets input/output paths via config")
+    import region_config
+    region_config.add_footprint_arg(p)
     p.add_argument("--plot-map", action="store_true", help="Write choropleth maps of per-cell deltas")
     p.add_argument("--save-gpkg", action="store_true", help="Write per-cell GeoPackage with counterfactual columns")
     p.add_argument(
@@ -139,7 +149,10 @@ def main():
     if not input_path.exists():
         raise FileNotFoundError(f"Missing input: {input_path}. Run step 02 first.")
 
-    if args.region:
+    if args.footprint:
+        import region_config
+        out_dir = region_config.footprint_step_paths(args.footprint, OUT_SUBDIR)
+    elif args.region:
         import region_config
         out_dir = region_config.step_paths(args.region, OUT_SUBDIR)
     else:

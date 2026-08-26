@@ -33,6 +33,8 @@ out_dir <- file.path(project_root, "outputs", "03d_bivariate")
 output_path <- file.path(out_dir, "03d_bivariate_poverty_residual.png")
 output_path_basemap <- file.path(out_dir, "03d_bivariate_poverty_residual_basemap.png")
 region_arg <- NULL
+skip_basemap <- FALSE
+footprint_arg <- NULL
 
 # Residual metric: allocation_residual (canonical)
 residual_var <- "allocation_residual"
@@ -52,11 +54,19 @@ while (i <= length(args)) {
   } else if (args[i] == "--residual-var" && i < length(args)) {
     residual_var <- args[i + 1]
     i <- i + 2
+  } else if (args[i] == "--no-basemap") {
+    skip_basemap <- TRUE
+    i <- i + 1
+  } else if (args[i] == "--footprint" && i < length(args)) {
+    footprint_arg <- args[i + 1]
+    i <- i + 2
   } else {
     i <- i + 1
   }
 }
-if (!is.null(region_arg) && nzchar(region_arg)) {
+if (!is.null(footprint_arg) && nzchar(footprint_arg)) {
+  out_dir <- footprint_figure_dir(footprint_arg, "03d_bivariate")
+} else if (!is.null(region_arg) && nzchar(region_arg)) {
   out_dir <- figure_dir(region_arg, "03d_bivariate")
 }
 output_path <- file.path(out_dir, "03d_bivariate_poverty_residual.png")
@@ -67,7 +77,7 @@ if (!file.exists(input_path)) {
 }
 
 gdf <- st_read(input_path, quiet = TRUE)
-map_bbox <- get_map_bbox_for_plot(region_arg, input_path, gdf)
+map_bbox <- get_map_bbox_for_plot(region_arg, input_path, gdf, footprint_arg = footprint_arg)
 coord_map <- coord_from_bbox(map_bbox)
 add_coord <- function(p, g) p + coord_map
 if (!"poverty_mean" %in% names(gdf)) {
@@ -185,53 +195,57 @@ message("Saved: ", output_path)
 # With Sentinel basemap (use gdf_plot for tile extent when Philippines)
 basemap_layer <- NULL
 basemap_zoom <- if (!is.null(map_bbox)) 10 else 12
-if (use_maptiles && requireNamespace("terra", quietly = TRUE)) {
-  tryCatch({
-    s2_provider <- maptiles::create_provider(
-      name = "Sentinel2-EOX",
-      url = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/webmercator/{z}/{x}/{y}.jpeg",
-      citation = "Sentinel-2 cloudless by EOX"
-    )
-    tiles <- maptiles::get_tiles(gdf_plot, provider = s2_provider, zoom = basemap_zoom, crop = TRUE, cachedir = tempdir())
-    basemap_layer <- ggspatial::annotation_spatial(tiles, alpha = 0.9)
-  }, error = function(e) {
+if (skip_basemap) {
+  message("Skipping basemap (--no-basemap)")
+} else {
+  if (use_maptiles && requireNamespace("terra", quietly = TRUE)) {
     tryCatch({
-      tiles <- maptiles::get_tiles(gdf_plot, provider = "Esri.WorldImagery", zoom = basemap_zoom, crop = TRUE, cachedir = tempdir())
-      basemap_layer <<- ggspatial::annotation_spatial(tiles, alpha = 0.9)
-    }, error = function(e2) NULL)
-  })
-}
-if (is.null(basemap_layer) && use_ggspatial) {
-  basemap_layer <- ggspatial::annotation_map_tile(type = "osm", zoom = basemap_zoom, alpha = 0.8, cachedir = tempdir())
-}
-
-if (use_ggspatial && !is.null(basemap_layer)) {
-  tryCatch({
-  if (use_biscale && use_cowplot) {
-    map_bm <- ggplot(gdf_plot) +
-      basemap_layer +
-      geom_sf(aes(fill = bi_class), color = "white", linewidth = 0.3, alpha = 0.5, show.legend = FALSE) +
-      biscale::bi_scale_fill(pal = "DkBlue", dim = 3) +
-      biscale::bi_theme() +
-      labs(title = "Bivariate: Poverty × Residual (Sentinel basemap)")
-    map_bm <- add_coord(map_bm, gdf)
-    legend_bm <- biscale::bi_legend(pal = "DkBlue", dim = 3, xlab = "Higher Poverty ", ylab = "Higher allocation ", size = 8)
-    p_bm <- cowplot::ggdraw() +
-      cowplot::draw_plot(map_bm, 0, 0, 1, 1) +
-      cowplot::draw_plot(legend_bm, 0.02, 0.02, 0.22, 0.22)
-  } else {
-    map_bm <- ggplot(gdf_plot) +
-      basemap_layer +
-      geom_sf(aes(fill = bi_class), color = "white", linewidth = 0.3, alpha = 0.5) +
-      scale_fill_manual(values = bivariate_palette, na.value = "grey90", drop = FALSE, name = paste0("Poverty | ", residual_legend)) +
-      theme_void() +
-      theme(legend.position = c(0.02, 0.02), legend.justification = c(0, 0)) +
-      labs(title = "Bivariate: Poverty × Allocation residual (basemap)")
-    p_bm <- add_coord(map_bm, gdf)
+      s2_provider <- maptiles::create_provider(
+        name = "Sentinel2-EOX",
+        url = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/webmercator/{z}/{x}/{y}.jpeg",
+        citation = "Sentinel-2 cloudless by EOX"
+      )
+      tiles <- maptiles::get_tiles(gdf_plot, provider = s2_provider, zoom = basemap_zoom, crop = TRUE, cachedir = tempdir())
+      basemap_layer <- ggspatial::annotation_spatial(tiles, alpha = 0.9)
+    }, error = function(e) {
+      tryCatch({
+        tiles <- maptiles::get_tiles(gdf_plot, provider = "Esri.WorldImagery", zoom = basemap_zoom, crop = TRUE, cachedir = tempdir())
+        basemap_layer <<- ggspatial::annotation_spatial(tiles, alpha = 0.9)
+      }, error = function(e2) NULL)
+    })
   }
-  ggsave(output_path_basemap, p_bm, width = 10, height = 8, dpi = 150, bg = "white", create.dir = TRUE)
-  message("Saved: ", output_path_basemap)
-  }, error = function(e) {
-    message("Basemap save failed: ", conditionMessage(e))
-  })
+  if (is.null(basemap_layer) && use_ggspatial) {
+    basemap_layer <- ggspatial::annotation_map_tile(type = "osm", zoom = basemap_zoom, alpha = 0.8, cachedir = tempdir())
+  }
+
+  if (use_ggspatial && !is.null(basemap_layer)) {
+    tryCatch({
+    if (use_biscale && use_cowplot) {
+      map_bm <- ggplot(gdf_plot) +
+        basemap_layer +
+        geom_sf(aes(fill = bi_class), color = "white", linewidth = 0.3, alpha = 0.5, show.legend = FALSE) +
+        biscale::bi_scale_fill(pal = "DkBlue", dim = 3) +
+        biscale::bi_theme() +
+        labs(title = "Bivariate: Poverty × Residual (Sentinel basemap)")
+      map_bm <- add_coord(map_bm, gdf)
+      legend_bm <- biscale::bi_legend(pal = "DkBlue", dim = 3, xlab = "Higher Poverty ", ylab = "Higher allocation ", size = 8)
+      p_bm <- cowplot::ggdraw() +
+        cowplot::draw_plot(map_bm, 0, 0, 1, 1) +
+        cowplot::draw_plot(legend_bm, 0.02, 0.02, 0.22, 0.22)
+    } else {
+      map_bm <- ggplot(gdf_plot) +
+        basemap_layer +
+        geom_sf(aes(fill = bi_class), color = "white", linewidth = 0.3, alpha = 0.5) +
+        scale_fill_manual(values = bivariate_palette, na.value = "grey90", drop = FALSE, name = paste0("Poverty | ", residual_legend)) +
+        theme_void() +
+        theme(legend.position = c(0.02, 0.02), legend.justification = c(0, 0)) +
+        labs(title = "Bivariate: Poverty × Allocation residual (basemap)")
+      p_bm <- add_coord(map_bm, gdf)
+    }
+    ggsave(output_path_basemap, p_bm, width = 10, height = 8, dpi = 150, bg = "white", create.dir = TRUE)
+    message("Saved: ", output_path_basemap)
+    }, error = function(e) {
+      message("Basemap save failed: ", conditionMessage(e))
+    })
+  }
 }

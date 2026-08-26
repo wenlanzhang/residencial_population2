@@ -121,6 +121,7 @@ in_arg <- NULL
 out_arg <- NULL
 cross_city <- FALSE
 region_cli <- NULL  # reserved for parity with other scripts (--region sets title hint only)
+footprint_cli <- NULL
 args <- commandArgs(trailingOnly = TRUE)
 i <- 1L
 while (i <= length(args)) {
@@ -135,6 +136,9 @@ while (i <= length(args)) {
     i <- i + 1L
   } else if (args[i] == "--region" && i < length(args)) {
     region_cli <- args[i + 1]
+    i <- i + 2L
+  } else if (args[i] == "--footprint" && i < length(args)) {
+    footprint_cli <- args[i + 1]
     i <- i + 2L
   } else {
     i <- i + 1L
@@ -165,11 +169,20 @@ if (cross_city) {
   dat <- read_single_region(impact_dir)
   if (!is.null(out_arg)) {
     out_dir <- out_arg
+  } else if (!is.null(footprint_cli) && nzchar(footprint_cli)) {
+    out_dir <- footprint_figure_dir(footprint_cli, "04_impact")
   } else if (!is.null(region_cli) && nzchar(region_cli)) {
     out_dir <- figure_dir(region_cli, "04_impact")
   } else {
     inf <- region_from_artifact_path(impact_dir)
-    out_dir <- if (!is.null(inf)) figure_dir(inf, "04_impact") else impact_dir
+    fp <- footprint_code_from_path(impact_dir)
+    out_dir <- if (!is.null(fp)) {
+      footprint_figure_dir(fp, "04_impact")
+    } else if (!is.null(inf)) {
+      figure_dir(inf, "04_impact")
+    } else {
+      impact_dir
+    }
   }
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
   suffix <- ""

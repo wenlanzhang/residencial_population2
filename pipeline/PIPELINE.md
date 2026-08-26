@@ -2,7 +2,7 @@
 
 **Use this file for:** how to run the full pipeline, resume from a step, **manual** Python/R order (same as the shell wrapper), script purposes, and the full **output file tree**. The [README](../README.md) is the short onboarding page; it defers here for technical detail.
 
-**Other docs:** [Region & data paths → `config/README.md`](../config/README.md) · [Cross-city tables/figures → `cross-city/README.md`](../cross-city/README.md)
+**Other docs:** [Region & data paths → `config/README.md`](../config/README.md) · [Cross-city / cross-country tables/figures → `cross-city/README.md`](../cross-city/README.md)
 
 ---
 
@@ -11,15 +11,15 @@
 From the **repository root**, use the wrapper (always Bash — avoids zsh issues with some arguments):
 
 ```bash
-./run --region PHI
+./run --region PHL
 ./run --region MEX
-./run --region IDN --all
+./run --footprint IDN
 ```
 
 This is equivalent to:
 
 ```bash
-bash pipeline/run_all.sh --region PHI
+bash pipeline/run_all.sh --region PHL
 ```
 
 The `run` script in the repo root is a thin wrapper: `exec bash pipeline/run_all.sh "$@"`.
@@ -28,11 +28,11 @@ The `run` script in the repo root is a thin wrapper: `exec bash pipeline/run_all
 
 | Option | Meaning |
 |--------|---------|
-| `--region COUNTRY` | All **selected cities** in that country. `PHI`, `KEN`, `MEX` (Mexico City + Puebla + León), `IDN` (Medan + Banda Aceh), `LKA`, `COL`, `ECU`, `ZAF`. |
-| `--region COUNTRY --all` | Unclipped Meta **extract** (all cells in the event AOI). Configured for `IDN`, `LKA`, `COL`, `ECU`, `ZAF` only. |
-| `--all` | All selected cities in every country (no event extracts). |
+| `--region COUNTRY` | All **selected cities** in that country. `PHL`, `KEN`, `MEX` (Mexico City + Puebla + León), `IDN` (Medan + Banda Aceh), `LKA`, `COL`, `ECU`, `ZAF`. |
+| `--footprint COUNTRY` | Event Meta **footprint** (PDC AOI as published, no extra clip). Same countries as `--region`. One country at a time. Harmonise + GHSL labels, then the **same 02–03f analysis** as a city run (tables + R figures, no satellite basemap). Writes `outputs/footprints/{CODE}/` and `figure/footprints/{CODE}/` so it does not overwrite `outputs/city/`. Then QA: `python pipeline/qa_footprints.py --footprint COUNTRY`. `--prep-only` stops after labels. Equivalent: `bash pipeline/run_footprint_prep.sh COUNTRY`. |
+| `--all` | All selected cities in every country. |
 | `--one CODE` | Resume a single output folder (e.g. `KEN_Nairobi`). Not the usual entry point. |
-| `--ref-hour HOUR` | Meta baseline hour: **0**, **8**, or **16**. Uses `outputs/{REGION}/fb_baseline_median_h{00|08|16}.gpkg`. If that file is missing, `./run` builds it from the PDC zip before step 01. |
+| `--ref-hour HOUR` | Meta baseline hour: **0**, **8**, or **16**. Uses `data/baselines/{COUNTRY}/fb_baseline_median_h{00|08|16}.gpkg`. If that file is missing, `./run` builds it from the PDC zip before step 01. |
 | `--poverty-source SOURCE` | Poverty layer for step 01: **`grdi`** (default, `data/raw/povmap-grdi-v1-10.tif`) or **`rwi`** (per-region Meta RWI CSV in `regions.json`). Re-run from 01 after switching. |
 | `--clip-source SOURCE` | City boundary for step 01: **`local`** (default, `clip_shape` file), **`osm`** (OSMnx/Nominatim), or **`geob`** (geoBoundaries). See [`config/README.md`](../config/README.md). Re-run from 01 after switching. `--clip-refresh` ignores the download cache. |
 | `--no-basemap` | Skip basemap tiles in R maps (less memory / no network). Forwarded to R scripts that support it. |
@@ -42,7 +42,7 @@ The `run` script in the repo root is a thin wrapper: `exec bash pipeline/run_all
 
 `01` (harmonise) → `01_plot_descriptive.R` → `02` (compare) → `02_plots.R` → `04` (impact) → `03a` + `03a_plots.R` → `03b` + `03b_plots.R` → `03c` + `03c_plots.R` → `03d` (R only) → `03e` + `03e_plots.R` → `03f` + `03f_plots.R`.
 
-**Output layout:** With `--region REGION`, outputs go under `outputs/{REGION}/`. If you call `run_all.sh` **without** `--region` (not typical for multi-city work), scripts use the flat layout `outputs/01/`, `outputs/02/`, etc. See [config/README.md](../config/README.md).
+**Output layout:** With `--region REGION`, outputs go under `outputs/city/{COUNTRY}/{city}/`. If you call `run_all.sh` **without** `--region` (not typical for multi-city work), scripts use the flat layout `outputs/01/`, `outputs/02/`, etc. See [config/README.md](../config/README.md).
 
 **Poverty-dependent steps:** 03a, 03b, 03d, 03e, and 03f require `poverty_mean` from step 01. Default poverty layer is **GRDI** (higher = more deprived). Pass `--poverty-source rwi` to use Meta RWI instead (`poverty_mean = -RWI`). Use `--no-poverty` on harmonise only if you skip those analyses.
 
@@ -84,13 +84,14 @@ Step **02** figures come from `02_plots.R` (`*_r.png`). Python 02 writes tables 
 
 ## Manual step-by-step order
 
-Use the same order as `./run`. Set `REGION` and paths to match your run; with `--region`, `GPKG_01` and `GPKG_02` are `outputs/$REGION/01/harmonised_meta_worldpop.gpkg` and `outputs/$REGION/02/harmonised_with_residual.gpkg`, and `OUT=outputs/$REGION`.
+Use the same order as `./run`. Prefer `--region` so scripts resolve `outputs/city/…` and `data/processed/city/…` themselves. If you pass paths by hand:
 
 ```bash
-REGION=PHI_CagayandeOroCity
-OUT=outputs/$REGION
-G01=$OUT/01/harmonised_meta_worldpop.gpkg
-G02=$OUT/02/harmonised_with_residual.gpkg
+REGION=PHL_CagayandeOroCity
+GEO=data/processed/city/PHL/CagayandeOroCity
+OUT=outputs/city/PHL/CagayandeOroCity
+G01=$GEO/01/harmonised_meta_worldpop.gpkg
+G02=$GEO/02/harmonised_with_residual.gpkg
 
 # 01 + descriptive R (default poverty: GRDI; add --poverty-source rwi for Meta RWI)
 python pipeline/01_harmonise_datasets.py --region $REGION
@@ -148,24 +149,26 @@ Plots for **02** and **03a–03f** use a consistent figure style; filenames ofte
 CSVs, figures, and GPKGs are split. Folders are created as needed.
 
 ```
-outputs/{COUNTRY}/{city}/     # tables only, e.g. outputs/KEN/Nairobi/03c_spatial_regression/Table_tau_comparison.csv
-outputs/{COUNTRY}/full/       # unclipped extract (--region IDN --all)
-figure/{COUNTRY}/{city}/      # PNGs, same step subfolders
-figure/{COUNTRY}/full/
-data/processed/{COUNTRY}/{city|full}/   # harmonised GPKGs
-data/baselines/{COUNTRY}/     # shared Meta baseline GPKG
-data/raw/                    # WorldPop, GRDI, boundaries, GHSL (source files)
+outputs/city/{COUNTRY}/{city}/     # tables, e.g. outputs/city/KEN/Nairobi/03c_spatial_regression/...
+outputs/footprints/{CODE}/         # Meta event AOI (./run --footprint COUNTRY)
+figure/city/{COUNTRY}/{city}/      # PNGs, same step subfolders
+figure/footprints/qa/              # footprint QA maps
+data/processed/city/{COUNTRY}/{city}/   # city GPKGs
+data/processed/footprints/{CODE}_aligned.parquet   # footprint cache
+data/baselines/{COUNTRY}/          # shared Meta baseline GPKG
+data/raw/                         # WorldPop, GRDI, boundaries, GHSL (source files)
 ```
 
-Mexico City is `outputs/MEX/MexicoCity/` (`MEX` in config). Event extracts use the `full` folder, not a city name.
+Mexico City is `outputs/city/MEX/MexicoCity/` (`MEX_MexicoCity` in config). Event footprints use `outputs/footprints/{CODE}/` and `figure/footprints/{CODE}/` (same step folders as cities: `02/`, `03a_regression/`, …). QA maps stay in `figure/footprints/qa/`.
 
 Example:
 
 ```
-outputs/KEN/Nairobi/02/Table1_meta_worldpop_metrics.csv
-figure/KEN/Nairobi/02/02_lorenz_curves_r.png
-data/processed/KEN/Nairobi/02/harmonised_with_residual.gpkg
+outputs/city/KEN/Nairobi/02/Table1_meta_worldpop_metrics.csv
+figure/city/KEN/Nairobi/02/02_lorenz_curves_r.png
+data/processed/city/KEN/Nairobi/02/harmonised_with_residual.gpkg
 data/baselines/KEN/fb_baseline_median_h00.gpkg
 ```
 
 Cross-city tables: `outputs/cross-city/`. Cross-city figures: `figure/cross-city/`.
+Cross-country tables: `outputs/cross-country/`. Cross-country figures: `figure/cross-country/`.

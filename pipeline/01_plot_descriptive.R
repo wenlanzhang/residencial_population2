@@ -39,9 +39,10 @@ output_data_overview_clip_log1p <- file.path(out_dir, "01_data_overview_clip_log
 output_bivariate <- file.path(out_dir, "01_bivariate_worldpop_meta.png")
 output_bivariate_basemap <- file.path(out_dir, "01_bivariate_worldpop_meta_basemap.png")
 threshold <- 0.5
-region_arg <- NULL  # PHI, KEN, MEX from --region; or NULL for auto
+region_arg <- NULL
 skip_basemap <- FALSE
 basemap_zoom_arg <- NULL  # override default zoom if set
+footprint_arg <- NULL
 
 args <- commandArgs(trailingOnly = TRUE)
 i <- 1
@@ -63,7 +64,7 @@ while (i <= length(args)) {
     i <- i + 2
   } else if (args[i] == "--region" && i < length(args)) {
     region_arg <- args[i + 1]
-    if (region_arg == "philippines") region_arg <- "PHI"
+    if (region_arg == "philippines") region_arg <- "PHL"
     if (region_arg == "nairobi") region_arg <- "KEN_Nairobi"
     if (region_arg == "mombasa") region_arg <- "KEN_Mombasa"
     if (region_arg == "auto") region_arg <- NULL
@@ -71,9 +72,12 @@ while (i <= length(args)) {
       regions <- load_regions()
       valid <- region_codes(regions)
       if (length(valid) > 0 && !region_arg %in% valid) {
-        stop("--region must be a valid region from config (e.g. PHI_CagayandeOroCity, KEN_Nairobi, MEX, IDN, LKA, COL, ECU, ZAF)")
+        stop("--region must be a city code from config (e.g. PHL_CagayandeOroCity, KEN_Nairobi, MEX_MexicoCity)")
       }
     }
+    i <- i + 2
+  } else if (args[i] == "--footprint" && i < length(args)) {
+    footprint_arg <- args[i + 1]
     i <- i + 2
   } else if (args[i] == "--no-basemap") {
     skip_basemap <- TRUE
@@ -89,11 +93,18 @@ while (i <= length(args)) {
   }
 }
 
-if (!is.null(region_arg) && nzchar(region_arg)) {
+if (!is.null(footprint_arg) && nzchar(footprint_arg)) {
+  out_dir <- footprint_figure_dir(footprint_arg, "01")
+} else if (!is.null(region_arg) && nzchar(region_arg)) {
   out_dir <- figure_dir(region_arg, "01")
 } else {
   inf <- region_from_artifact_path(input_path)
-  if (!is.null(inf)) out_dir <- figure_dir(inf, "01")
+  fp <- footprint_code_from_path(input_path)
+  if (!is.null(fp)) {
+    out_dir <- footprint_figure_dir(fp, "01")
+  } else if (!is.null(inf)) {
+    out_dir <- figure_dir(inf, "01")
+  }
 }
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 output_data_overview_raw <- file.path(out_dir, "01_data_overview_raw.png")
@@ -111,13 +122,16 @@ if (!file.exists(input_path)) {
 gdf <- st_read(input_path, quiet = TRUE)
 
 # Get map_bbox (when clip_shape: uses data extent; else from config)
-map_bbox <- get_map_bbox_for_plot(region_arg, input_path, gdf)
+map_bbox <- get_map_bbox_for_plot(region_arg, input_path, gdf, footprint_arg = footprint_arg)
 if (!is.null(map_bbox)) {
   message("Using map extent: ", paste(round(map_bbox, 4), collapse = ", "))
 }
 
 # Region-specific output paths
 use_clip <- !is.null(map_bbox)
+if (!is.null(footprint_arg) && nzchar(footprint_arg)) {
+  use_clip <- FALSE
+}
 output_clip_raw <- output_data_overview_clip_raw
 output_clip_log1p <- output_data_overview_clip_log1p
 

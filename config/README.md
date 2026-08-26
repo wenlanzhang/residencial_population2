@@ -8,15 +8,22 @@
 
 ```bash
 # All selected cities in a country
-./run --region PHI
+./run --region PHL
 ./run --region KEN
 ./run --region MEX
 ./run --region IDN
-
-# Unclipped event extract (all cells)
-./run --region IDN --all
-./run --region ZAF --all
 ```
+
+**Event footprints** (Meta crisis AOI, not a city clip) use the **same countries** as `./run --region COUNTRY`.
+
+```bash
+./run --footprint KEN
+./run --footprint IDN
+./run --footprint PHL
+python pipeline/qa_footprints.py --footprint KEN
+```
+
+`list_footprints()` is the union of city countries and event-donor keys in `regions.json`. Philippines is **PHL** for both cities (`PHL_*`) and the event footprint. Outputs go to `outputs/footprints/{CODE}/`.
 
 ## Path resolution
 
@@ -25,7 +32,7 @@
 - **poverty_grdi** (top-level): Path to the global GRDI GeoTIFF, relative to the **project root** (default `data/raw/povmap-grdi-v1-10.tif`). Not under `data_root`.
 - **clip_source** (top-level): `local` (default), `osm`, or `geob`. Select with `./run --clip-source osm`. Per-region override is allowed.
 - **Project paths**: `worldpop`, `meta`, `clip_shape`, `pdc_processed_csv` are relative to the project root. WorldPop GeoTIFFs live in `data/raw/worldpop/`.
-- **meta** includes the reference hour: `outputs/{REGION}/fb_baseline_median_h{00|08|16}.gpkg`. Use the default-hour file for the pipeline, or pass `--meta` to 01_harmonise when using a different hour.
+- **meta** includes the reference hour: `data/baselines/{COUNTRY}/fb_baseline_median_h{00|08|16}.gpkg`. Use the default-hour file for the pipeline, or pass `--meta` to 01_harmonise when using a different hour.
 - To use a different location for PDC/RWI, change `data_root` only. WorldPop and GRDI stay under `data/` unless you change those paths in config.
 
 ## Adding a new region
@@ -57,7 +64,7 @@
    | `osm` | `--clip-source osm` | [OSMnx](https://osmnx.readthedocs.io/) `geocode_to_gdf` (Nominatim). Falls back to Nominatim directly if osmnx is not installed. Query: `clip_osm_place` (e.g. `"Nairobi, Kenya"`). First download is cached in `data/raw/boundaries/cache/osm/`. |
    | `geob` | `--clip-source geob` | [geoBoundaries](https://www.geoboundaries.org/) gbOpen API. Filter by `clip_geob_iso3`, `clip_geob_adm`, `clip_geob_name`. Cached in `data/raw/boundaries/cache/geob/`. |
 
-   Re-download with `--clip-refresh`. Step 01 also writes `outputs/{REGION}/01/clip_boundary.gpkg` so you can see the polygon that was used.
+   Re-download with `--clip-refresh`. Step 01 also writes `data/processed/city/{COUNTRY}/{city}/01/clip_boundary.gpkg` so you can see the polygon that was used.
 
    Example:
 
@@ -70,9 +77,11 @@
 4. `lon_range` / `lat_range`: used for auto-detecting region from data centroid.
 5. **PDC (Meta baseline)**: `pdc_raw_dir` = Meta event `.zip` or unzipped folder under `data_root` (CSVs are read from the zip in memory; unzipping is optional). `pdc_processed_csv` = optional intermediate. `pdc_use_baseline_column` (optional): if omitted, auto-detected — data spans 14+ days → 7-day shift; under 14 days → use n_baseline from CSV (if present). Set `true` or `false` to override.
 
-6. **Shared PDC extracts**: Philippines cities share WorldPop, poverty, and the Basyang Meta file (only the clip differs). Kenya cities share the floods extract; Mexico cities share the central-earthquake extract. `./run --region IDN` (etc.) runs the **cities**; `./run --region IDN --all` runs the unclipped extract (`clip_shape` unset). City folders share that baseline GPKG and set `clip_source` to `geob` (geoBoundaries ADM2).
+6. **Shared PDC extracts**: Philippines cities share WorldPop, poverty, and the Basyang Meta file (only the clip differs). Kenya cities share the floods extract; Mexico cities share the central-earthquake extract. `./run --region IDN` (etc.) runs the **cities**. Country keys with `clip_shape` unset (IDN, LKA, COL, ECU, ZAF) stay in `regions.json` as data donors for those cities and for `./run --footprint COUNTRY`; they are not a city-pipeline product. City folders share that baseline GPKG and set `clip_source` to `geob` (geoBoundaries ADM2).
 
 ## Output layout
 
-`./run --region KEN` writes tables to `outputs/KEN/{Nairobi,Mombasa,...}/` and figures to `figure/KEN/{city}/`.  
-`./run --region IDN --all` writes `outputs/IDN/full/` and `figure/IDN/full/`.
+`./run --region KEN` writes tables to `outputs/city/KEN/{Nairobi,Mombasa,...}/` and figures to `figure/city/KEN/{city}/`.  
+`./run --region MEX` runs `MEX_MexicoCity`, `MEX_Puebla`, and `MEX_Leon`.  
+Meta snapshot hour is Pacific time, chosen to sit near evening locally: **16** Kenya / South Africa; **8** Philippines / Indonesia / Sri Lanka; **0** Mexico / Colombia / Ecuador. Default baseline method is **n_baseline**.  
+`./run --footprint KEN` writes `outputs/footprints/KEN/` (and QA under `outputs/footprints/qa/`).

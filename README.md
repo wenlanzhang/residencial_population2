@@ -18,12 +18,12 @@ The pipeline includes:
 - **Script 03e:** Causal setup — treatment/outcome definitions, multiple estimators (regression, IPW, doubly robust)
 - **Script 03f:** Robustness — SEM and related checks under alternative specifications
 
-**Technical reference (single place):** `[pipeline/PIPELINE.md](pipeline/PIPELINE.md)` — `./run` options, Python+R step order with commands, script ↔ file mapping, output tree, publication-style figures. `config/README.md` explains `regions.json`; `cross-city/README.md` explains multi-city tables and figures.
+**Technical reference (single place):** `[pipeline/PIPELINE.md](pipeline/PIPELINE.md)` — `./run` options, Python+R step order with commands, script ↔ file mapping, output tree, publication-style figures. `config/README.md` explains `regions.json`; `cross-city/README.md` explains multi-city and cross-country tables and figures.
 
 ## Prerequisites
 
 - **Python 3.9+** (with conda recommended: `conda activate geo_env_LLM`)
-- **R 4.0+** for pipeline and cross-city plotting
+- **R 4.0+** for pipeline, cross-city, and cross-country plotting
 
 
 
@@ -41,7 +41,7 @@ Main dependencies: geopandas, rasterio, rasterstats, pandas, numpy, scipy, matpl
 install.packages(c("sf", "ggplot2", "dplyr", "patchwork", "biscale", "cowplot"))
 ```
 
-Cross-city scripts also need `tidyr`: see `cross-city/README.md`.
+Cross-city and cross-country scripts also need `tidyr`: see `cross-city/README.md`.
 
 ## Quick Start
 
@@ -53,17 +53,19 @@ Cross-city scripts also need `tidyr`: see `cross-city/README.md`.
 
 ```bash
 # All selected cities in a country (clipped in step 01)
-./run --region PHI
+./run --region PHL
 ./run --region KEN
 ./run --region MEX          # Mexico City, Puebla, León
-./run --region IDN          # Medan, Banda Aceh (not the unclipped extract)
+./run --region IDN          # Medan, Banda Aceh
 
-# Unclipped Meta extract — all cells in the event AOI (slow). PHI/KEN/MEX have no extract region.
-./run --region IDN --all
-./run --region LKA --all
-./run --region COL --all
-./run --region ECU --all
-./run --region ZAF --all
+# Event Meta footprint — one country at a time (no city clip)
+# Prep + the same 02–03f analysis as cities (CSVs/figures under outputs/figure/footprints/)
+./run --footprint KEN
+./run --footprint IDN
+./run --footprint PHL
+python pipeline/qa_footprints.py --footprint KEN
+# Labels only (skip SEM / figures):
+bash pipeline/run_footprint_prep.sh KEN --prep-only
 
 # Every selected city in every country
 ./run --all
@@ -73,7 +75,7 @@ Cross-city scripts also need `tidyr`: see `cross-city/README.md`.
 ./run --region KEN --ref-hour 8
 ./run --region KEN --poverty-source rwi
 ./run --region KEN --clip-source geob
-./run --region PHI --start-from 03b
+./run --region PHL --start-from 03b
 ```
 
 To run scripts **manually** (or to see every `Rscript` line the wrapper uses), use only `pipeline/PIPELINE.md` **[→ Manual step-by-step order](pipeline/PIPELINE.md#manual-step-by-step-order)** so the list is not duplicated here.
@@ -84,11 +86,20 @@ After running per-region pipelines (or `./run --all`):
 
 ```bash
 python cross-city/run_cross_city_table.py --aggregate-only
-python cross-city/run_cross_city_table.py --regions PHI,KEN,MEX
-python cross-city/run_cross_city_table.py --include-full
+python cross-city/run_cross_city_table.py --regions PHL,KEN,MEX
 ```
 
 **Figures:** `Rscript cross-city/figures_cross_city.R` (PNGs in `figure/cross-city/`).
+
+### 3. Cross-country comparison (Meta event footprints)
+
+After `./run --footprint COUNTRY` for each country:
+
+```bash
+python cross-city/run_cross_country_table.py
+```
+
+**Figures:** `Rscript cross-city/figures_cross_country.R` (tables in `outputs/cross-country/`; PNGs in `figure/cross-country/`). Residual maps are not produced.
 
 Tables, figure filenames, and options: `cross-city/README.md`.
 
