@@ -602,6 +602,20 @@ def baseline_path(region: str, hour: int, method: str | None = None) -> Path:
     return PROJECT_ROOT / "data" / "baselines" / country / f"{name}.gpkg"
 
 
+def crisis_median_path(code: str, hour: int) -> Path:
+    """Country-level cache of median n_crisis at the reference hour (shared by cities)."""
+    country = country_prefix(code)
+    return PROJECT_ROOT / "data" / "baselines" / country / f"fb_crisis_median_h{int(hour):02d}.csv"
+
+
+def crisis_snapshots_path(code: str, hour: int) -> Path:
+    """Country-level cache of per-day n_crisis at the reference hour."""
+    country = country_prefix(code)
+    return (
+        PROJECT_ROOT / "data" / "baselines" / country / f"fb_crisis_snapshots_h{int(hour):02d}.parquet"
+    )
+
+
 class StepPaths:
     """One step's CSV / figure / GPKG dirs. ``paths / 'a.png'`` routes by suffix."""
 

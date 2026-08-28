@@ -28,7 +28,7 @@ The `run` script in the repo root is a thin wrapper: `exec bash pipeline/run_all
 
 | Option | Meaning |
 |--------|---------|
-| `--region COUNTRY` | All **selected cities** in that country. `PHL`, `KEN`, `MEX` (Mexico City + Puebla + León), `IDN` (Medan + Banda Aceh), `LKA`, `COL`, `ECU`, `ZAF`. |
+| `--region COUNTRY` | All **selected cities** in that country (21 total). `PHL` (4), `KEN` (4), `MEX` (Mexico City, Puebla, León), `IDN` (Medan, Banda Aceh), `LKA` (Colombo, Kandy), `COL` (Barranquilla, Cartagena), `ECU` (Cuenca, Guayaquil), `ZAF` (Cape Town, Garden Route). |
 | `--footprint COUNTRY` | Event Meta **footprint** (PDC AOI as published, no extra clip). Same countries as `--region`. One country at a time. Harmonise + GHSL labels, then the **same 02–03f analysis** as a city run (tables + R figures, no satellite basemap). Writes `outputs/footprints/{CODE}/` and `figure/footprints/{CODE}/` so it does not overwrite `outputs/city/`. Then QA: `python pipeline/qa_footprints.py --footprint COUNTRY`. `--prep-only` stops after labels. Equivalent: `bash pipeline/run_footprint_prep.sh COUNTRY`. |
 | `--all` | All selected cities in every country. |
 | `--one CODE` | Resume a single output folder (e.g. `KEN_Nairobi`). Not the usual entry point. |
@@ -36,11 +36,11 @@ The `run` script in the repo root is a thin wrapper: `exec bash pipeline/run_all
 | `--poverty-source SOURCE` | Poverty layer for step 01: **`grdi`** (default, `data/raw/povmap-grdi-v1-10.tif`) or **`rwi`** (per-region Meta RWI CSV in `regions.json`). Re-run from 01 after switching. |
 | `--clip-source SOURCE` | City boundary for step 01: **`local`** (default, `clip_shape` file), **`osm`** (OSMnx/Nominatim), or **`geob`** (geoBoundaries). See [`config/README.md`](../config/README.md). Re-run from 01 after switching. `--clip-refresh` ignores the download cache. |
 | `--no-basemap` | Skip basemap tiles in R maps (less memory / no network). Forwarded to R scripts that support it. |
-| `--start-from STEP` | Skip all steps **before** `STEP` and run from there through **03f**. Valid: `01`, `02`, `04`, `03a`, `03b`, `03c`, `03d`, `03e`, `03f`. |
+| `--start-from STEP` | Skip all steps **before** `STEP` and run from there through **03f**. Valid: `01`, `02`, `04`, `04b`, `03a`, `03b`, `03c`, `03d`, `03e`, `03f`. |
 
 **Execution order** (same in the wrapper and in [Manual step-by-step order](#manual-step-by-step-order) below):
 
-`01` (harmonise) → `01_plot_descriptive.R` → `02` (compare) → `02_plots.R` → `04` (impact) → `03a` + `03a_plots.R` → `03b` + `03b_plots.R` → `03c` + `03c_plots.R` → `03d` (R only) → `03e` + `03e_plots.R` → `03f` + `03f_plots.R`.
+`01` (harmonise) → `01b` (Meta coverage QA) → `01_plot_descriptive.R` → `02` (compare) → `02_plots.R` → `04a` (impact) → `04b` (crisis inference) → `03a` + `03a_plots.R` → `03b` + `03b_plots.R` → `03c` + `03c_plots.R` → `03d` (R only) → `03e` + `03e_plots.R` → `03f` + `03f_plots.R`.
 
 **Output layout:** With `--region REGION`, outputs go under `outputs/city/{COUNTRY}/{city}/`. If you call `run_all.sh` **without** `--region` (not typical for multi-city work), scripts use the flat layout `outputs/01/`, `outputs/02/`, etc. See [config/README.md](../config/README.md).
 
@@ -53,8 +53,10 @@ The `run` script in the repo root is a thin wrapper: `exec bash pipeline/run_all
 | Order | Python | R (publication-style / maps) |
 |-------|--------|------------------------------|
 | 01 | `01_harmonise_datasets.py` | `01_plot_descriptive.R` |
+| 01b | `01b_meta_coverage_qa.py` | `01b_plots.R` |
 | 02 | `02_compare_meta_worldpop.py` | `02_plots.R` |
-| 04 | `04_impact.py` | — |
+| 04a | `04_impact.py` | `04_plots.R` |
+| 04b | `04b_crisis_inference.py` | `04b_plots.R` |
 | 03a | `03a_regression.py` | `03a_plots.R` |
 | 03b | `03b_stratified.py` | `03b_plots.R` |
 | 03c | `03c_spatial_regression.py` | `03c_plots.R` |
@@ -71,8 +73,10 @@ Step **02** figures come from `02_plots.R` (`*_r.png`). Python 02 writes tables 
 | Step | Purpose | Default input | Default output dir |
 |------|---------|---------------|----------------------|
 | **01** | Harmonise | Rasters + baseline GPKG | GPKG → `data/processed/.../01/`; maps → `figure/.../01/` |
+| **01b** | Meta coverage QA | 01 GPKG + city clip | `outputs/.../01b_coverage/`, GPKG → `data/processed/.../01b_coverage/`; map → `figure/.../01b_coverage/` |
 | **02** | Compare Meta vs WorldPop | 01 GPKG | CSVs → `outputs/.../02/`; maps → `figure/.../02/` |
-| **04** | Allocation impact | 02 GPKG | `outputs/.../04_impact/` + `figure/.../04_impact/` |
+| **04a** | Baseline allocation impact | 02 GPKG | `outputs/.../04_impact/` + `figure/.../04_impact/` |
+| **04b** | Crisis inference sensitivity | 02 GPKG + PDC `n_crisis` | `outputs/.../04b_crisis_inference/` + `figure/.../04b_crisis_inference/` |
 | **03a** | Residual ~ poverty OLS | 02 GPKG | `outputs/.../03a_regression/` |
 | **03b** | Strata / Gini | 02 GPKG | `outputs/.../03b_stratified/` |
 | **03c** | SLM, SEM τ | 02 GPKG | τ tables in `outputs/.../03c_spatial_regression/` |
@@ -93,16 +97,23 @@ OUT=outputs/city/PHL/CagayandeOroCity
 G01=$GEO/01/harmonised_meta_worldpop.gpkg
 G02=$GEO/02/harmonised_with_residual.gpkg
 
-# 01 + descriptive R (default poverty: GRDI; add --poverty-source rwi for Meta RWI)
+# 01 + 01b coverage QA + descriptive R (default poverty: GRDI; add --poverty-source rwi for Meta RWI)
 python pipeline/01_harmonise_datasets.py --region $REGION
+python pipeline/01b_meta_coverage_qa.py --region $REGION
+Rscript pipeline/01b_plots.R --region $REGION
 Rscript pipeline/01_plot_descriptive.R -i "$G01" --region $REGION
 
 # 02 + plots
 python pipeline/02_compare_meta_worldpop.py --region $REGION
 Rscript pipeline/02_plots.R -i "$G02" --region $REGION
 
-# 04 impact (optional flags on script: --plot-map, --save-gpkg)
+# 04a impact (optional flags on script: --plot-map, --save-gpkg)
 python pipeline/04_impact.py --region $REGION
+Rscript pipeline/04_plots.R -i "$OUT/04_impact" --region $REGION
+
+# 04b crisis inference sensitivity (needs PDC zip; caches median n_crisis by country)
+python pipeline/04b_crisis_inference.py --region $REGION
+Rscript pipeline/04b_plots.R --region $REGION
 
 # 03a–03f
 python pipeline/03a_regression.py -i "$G02" -o "$OUT"
@@ -133,12 +144,14 @@ Plots for **02** and **03a–03f** use a consistent figure style; filenames ofte
 
 | Script | Role |
 |--------|------|
-| `02_plots.R` | Density, scatter, Lorenz, CDF, allocation map, typology, LISA, hotspot (`02_*_r.png`) |
+| `01b_plots.R` | Meta coverage map: published vs eligible-but-unpublished (`01b_meta_coverage_r.png`) |
+| `04_plots.R` | 04a: high-poverty allocation dumbbell, M bar, combined operational impact |
+| `04b_plots.R` | 04b: crisis G maps, sign-change map, snapshot F_t, S-by-deprivation (supplement) |
 | `03a_plots.R` | Residual distribution |
 | `03b_plots.R` | Marginal effects, strata, Gini by quintile |
 | `03c_plots.R` | SLM/SEM residual choropleths (`*_residual_map_r.png`) |
 | `03e_plots.R` | Forest plot of causal τ estimates |
-| `03f_plots.R` | Forest plot of robustness specifications |
+| `03f_plots.R` | Forest plot of robustness specifications; Meta low-count, composition, and privacy-censoring sensitivity (`03f_meta_count_sensitivity_r.png`, `03f_meta_count_residual_by_poverty_r.png`, `03f_meta_censoring_sensitivity_r.png`) |
 
 **Standalone alternatives:** `python pipeline/01_harmonise_datasets.py --plot` can trigger plotting from Python instead of/in addition to `01_plot_descriptive.R`.
 

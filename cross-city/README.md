@@ -1,6 +1,6 @@
 # Cross-city comparison
 
-Horizontal run across **all selected study cities** that have data: steps 01, 02, 03c, then summary tables. The original four/five cities are not a special case — they use the same country/city folders as everyone else.
+Horizontal run across **all selected study cities** (21 cities in PHL, KEN, MEX, IDN, LKA, COL, ECU, ZAF) that have data: aggregate existing per-city outputs (or run 01, 02, 03c first), then summary tables. Every city uses the same country/city folders.
 
 **Per-region pipeline and `./run` options:** [`pipeline/PIPELINE.md`](../pipeline/PIPELINE.md).
 
@@ -46,6 +46,10 @@ Columns include **Country**, **City**, **Region** (config code), then:
 
 Step **01** GeoPackages keep all cells; step **02** and downstream scripts use the filtered analysis grid. The cross-city table reports **both** scopes side by side.
 
+### Table 1b — Meta coverage of the eligible city grid (01b)
+
+One row per city from `outputs/city/{COUNTRY}/{city}/01b_coverage/Table_meta_coverage.csv`. \(C_c = N_{\mathrm{published}}/N_{\mathrm{grid}}\) on an independently defined city grid (published vs eligible-but-unpublished tiles). Also median WorldPop and GRDI on published vs missing tiles.
+
 ### Table 2 — Poverty Effect (Spatially Corrected)
 
 | Country | City | Region | OLS τ | SEM τ | exp(SEM τ) | SEM p-value |
@@ -55,6 +59,31 @@ Step **01** GeoPackages keep all cells; step **02** and downstream scripts use t
 - **SEM τ**: Treatment effect from Spatial Error Model (spatially corrected)
 - **exp(SEM τ)**: Multiplicative effect on Meta/WP ratio per unit T
 - **SEM p-value**: Significance of SEM τ
+
+### Tables 2b–2d — Meta-count and censoring robustness (03f)
+
+Aggregated from each city’s `outputs/city/{COUNTRY}/{city}/03f_robustness/`:
+
+| File | Contents |
+|------|----------|
+| `Table2b_meta_count_sensitivity.csv` | SEM τ under Meta low-count filters |
+| `Table2c_meta_count_composition.csv` | Composition of Meta count bins (GRDI, residual, density) |
+| `Table2d_meta_censoring_sensitivity.csv` | Missing-cell privacy-censoring sensitivity |
+
+### Table 4c — Crisis inference sensitivity (04b)
+
+One row per city from `outputs/city/{COUNTRY}/{city}/04b_crisis_inference/Table4c_crisis_inference_sensitivity.csv`.
+
+| country | city | time | n | direction_flip_pct | jaccard_increase_top10 | jaccard_decrease_top10 | median_sensitivity_high_deprivation | median_sensitivity_other |
+|---------|------|------|---|--------------------|------------------------|------------------------|-------------------------------------|--------------------------|
+
+- **direction_flip_pct**: Share of cells whose inferred increase/decrease sign flips when the Meta baseline total is reallocated with WorldPop's spatial pattern (crisis counts held fixed)
+- **jaccard_increase_top10 / jaccard_decrease_top10**: Overlap of the top 10% strongest inferred increases (decreases)
+- **flip_pct_high_deprivation / flip_pct_other / delta_F**: P(flip | high deprivation), P(flip | other), and the difference in percentage points
+- **median_F_t, F_t_min, F_t_max**: Flip rate across individual crisis days at the reference hour (not the median count)
+- **delta_S**: Supplementary only — |G_Meta − G_WP| does not depend on C
+
+Per-city maps: `figure/city/{COUNTRY}/{city}/04b_crisis_inference/04b_crisis_sensitivity_maps.png` (Cape Town is the worked example).
 
 ## Usage
 
@@ -95,8 +124,12 @@ Reads `outputs/cross-city/Table1_*.csv` (and Table 2 / rank-instability when pre
 | **03c_spearman_vs_tau.png** | 03c |
 | **03c_delta_gini_vs_tau.png** | 03c |
 | **03c_forest_scatter.png** | 03c (forest + ΔGini scatter) |
+| **03c_tau_vs_city_grdi.png** | 03c (τ vs median GRDI and vs within-city GRDI gap; `outputs/cross-city/Table_tau_vs_city_grdi.csv`) |
+| **04b_cross_city_crisis_sensitivity.png** | 04b (median daily flip rate with IQR and min–max; J₁₀⁺ / J₁₀⁻) |
+| **04b_socioeconomic_sensitivity.png** | 04b (ΔF: P(flip \| high deprivation) − P(flip \| other)) |
+| **04b_baseline_divergence_socioeconomic.png** | 04b supplement (ΔS; C cancels — baseline discrepancy, not crisis inference) |
 
-Also writes `outputs/cross-city/Table_sem_tau_all_cities.csv`. Requires: sf, ggplot2, dplyr, tidyr, patchwork.
+Also writes `outputs/cross-city/Table_sem_tau_all_cities.csv` and `Table_tau_vs_city_grdi.csv`. Requires: sf, ggplot2, dplyr, tidyr, patchwork (ggrepel optional for city labels).
 
 ## Cross-country (Meta event footprints)
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env Rscript
-# 04_plots.R — Figures from pipeline 04 (allocation sensitivity & share-space redistribution M)
+# 04_plots.R — 04a figures (allocation sensitivity & share-space redistribution M)
+# 04b maps/cross-city figures are pipeline/04b_plots.R and cross-city/figures_cross_city.R.
 #
 # Fig 1 — Dumbbell: WorldPop vs Meta share of allocation to high-poverty cells (≥ p75), Table4b full_grid.
 # Fig 2 — Bars: redistribution magnitude M (Table4 summary). Panel text kept minimal; define Σ formula in manuscript.

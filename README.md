@@ -1,31 +1,52 @@
 # Residential Population Analysis
 
-Analysis pipeline comparing **Meta** and **WorldPop** residential population estimates, with **poverty / deprivation** (default: **GRDI**; optional: Meta **RWI**) as an explanatory variable for digital representation bias.
+Harmonise **Meta** (Facebook Population During Crisis baseline) and **WorldPop** counts onto the Meta quadkey grid, then ask how **poverty / deprivation** (default **GRDI**; optional Meta **RWI**) relates to digital representation bias — Meta under- or over-representing people relative to WorldPop — and how that bias would change crisis-period inferences.
 
-## Overview
+The study sample is **21 cities in 8 countries**, each clipped from a Meta event extract. A second product re-runs the same analysis on the **unclipped event footprint**.
 
-This project harmonises Meta Facebook baseline and WorldPop population rasters to a common quadkey grid, compares their spatial distributions, and investigates how poverty relates to residual bias (Meta underrepresentation relative to WorldPop).
+## Study sample
 
-The pipeline includes:
+| Country | Code | Cities | Meta hour (Pacific) |
+|---------|------|--------|---------------------|
+| Philippines | PHL | Cagayan de Oro, Davao City, Zamboanga City, General Santos | 8 |
+| Kenya | KEN | Nairobi, Mombasa, Kisumu, Nakuru | 16 |
+| Mexico | MEX | Mexico City, Puebla, León | 0 |
+| Indonesia | IDN | Medan, Banda Aceh | 8 |
+| Sri Lanka | LKA | Colombo, Kandy | 8 |
+| Colombia | COL | Barranquilla, Cartagena | 0 |
+| Ecuador | ECU | Cuenca, Guayaquil | 0 |
+| South Africa | ZAF | Cape Town, Garden Route | 16 |
 
-- Harmonisation to the Meta quadkey grid
-- **Script 02:** Summary stats, spatial agreement (Pearson/Spearman, log-log regression), rank agreement (Top-X overlap, Jaccard), distribution similarity (KS, EMD), inequality (Gini, Lorenz), spatial structure (Moran's I, LISA, Gi*, hotspot overlap), residuals, agreement typology (HH/LL/HL/LH)
-- **Script 04:** Person-level allocation impact — counterfactual counts if one source’s total were spread with the other’s spatial pattern (summary table; optional maps and per-cell GPKG)
-- **Script 03a:** Associational models — Residual ~ Poverty + Distance + Density (covariate-adjusted), diagnostics (VIF, heteroskedasticity)
-- **Script 03b:** Stratified analysis, Gini by poverty quintile, interactions
-- **Script 03c:** Spatial regression (SLM, SEM), including treatment effects (τ) vs OLS
-- **Script 03d:** Bivariate maps (Poverty × Residual) in R
-- **Script 03e:** Causal setup — treatment/outcome definitions, multiple estimators (regression, IPW, doubly robust)
-- **Script 03f:** Robustness — SEM and related checks under alternative specifications
+Hour is chosen so the snapshot sits near evening locally. Default baseline method is **n_baseline**. Philippines is **PHL** (not PHI). Mexico City is config code `MEX_MexicoCity` → folder `MexicoCity/`.
 
-**Technical reference (single place):** `[pipeline/PIPELINE.md](pipeline/PIPELINE.md)` — `./run` options, Python+R step order with commands, script ↔ file mapping, output tree, publication-style figures. `config/README.md` explains `regions.json`; `cross-city/README.md` explains multi-city and cross-country tables and figures.
+## What the pipeline does
+
+1. **01** Harmonise Meta, WorldPop, and poverty onto the quadkey grid (city clip).
+2. **01b** Meta coverage QA on an independent city grid: published vs eligible-but-unpublished tiles (\(C_c = N_{\mathrm{published}}/N_{\mathrm{grid}}\)).
+3. **02** Spatial agreement, inequality (Gini/Lorenz), residuals, hotspot overlap.
+4. **04a** Allocation impact: counterfactual counts if one source’s total followed the other’s spatial pattern.
+5. **04b** Crisis inference sensitivity: hold Meta crisis counts and the Meta baseline total fixed, reallocate that total with WorldPop’s pattern; direction-flip %, hotspot Jaccard, deprivation-patterned ΔF.
+6. **03a–03f** Poverty models (OLS, strata, SEM τ, bivariate maps, causal estimators, robustness including Meta low-count and privacy-censoring checks).
+
+**Technical reference:** [`pipeline/PIPELINE.md`](pipeline/PIPELINE.md) — `./run` options, Python+R step order, script ↔ file mapping, output tree. [`config/README.md`](config/README.md) is region paths; [`cross-city/README.md`](cross-city/README.md) is multi-city / cross-country tables and figures; [`data/README.md`](data/README.md) is source files.
+
+## Two products
+
+| Product | Command | Tables / figures | Harmonised data |
+|---------|---------|------------------|-----------------|
+| **Cities** (clipped) | `./run --region PHL` (or `KEN`, `MEX`, `IDN`, `LKA`, `COL`, `ECU`, `ZAF`) | `outputs/city/{COUNTRY}/{city}/`, `figure/city/{COUNTRY}/{city}/` | `data/processed/city/{COUNTRY}/{city}/` |
+| **Event footprint** (PDC AOI, no city clip) | `./run --footprint KEN` | `outputs/footprints/{CODE}/`, `figure/footprints/{CODE}/` | `data/processed/footprints/` |
+| **Cross-city** | `python cross-city/run_cross_city_table.py --aggregate-only` then `Rscript cross-city/figures_cross_city.R` | `outputs/cross-city/`, `figure/cross-city/` | — |
+| **Cross-country** | `python cross-city/run_cross_country_table.py` then `Rscript cross-city/figures_cross_country.R` | `outputs/cross-country/`, `figure/cross-country/` | — |
+
+`./run --all` is every selected **city**. It does not write footprints. Shared city Meta baselines live in `data/baselines/{COUNTRY}/fb_baseline_median_h{00|08|16}.gpkg`. ISO3-only keys with `clip_shape` unset (`IDN`, `LKA`, `COL`, `ECU`, `ZAF`) are data donors, not a city run: use `./run --region IDN` for Medan and Banda Aceh, or `./run --footprint IDN` for the event AOI.
+
+Quote live tables from `outputs/cross-city/` (regenerated). Those folders are gitignored.
 
 ## Prerequisites
 
-- **Python 3.9+** (with conda recommended: `conda activate geo_env_LLM`)
+- **Python 3.9+** (conda recommended: `conda activate geo_env_LLM`)
 - **R 4.0+** for pipeline, cross-city, and cross-country plotting
-
-
 
 ### Python packages
 
@@ -38,76 +59,71 @@ Main dependencies: geopandas, rasterio, rasterstats, pandas, numpy, scipy, matpl
 ### R packages
 
 ```r
-install.packages(c("sf", "ggplot2", "dplyr", "patchwork", "biscale", "cowplot"))
+install.packages(c("sf", "ggplot2", "dplyr", "patchwork", "biscale", "cowplot", "tidyr"))
 ```
 
-Cross-city and cross-country scripts also need `tidyr`: see `cross-city/README.md`.
+## Quick start
 
-## Quick Start
+### 1. Per-city pipeline
 
-
-
-### 1. Run the pipeline
-
-**The one entry point** (Bash wrapper, zsh-safe) is `./run`, which calls `pipeline/run_all.sh`. If the Meta baseline GPKG is missing, it is built from the PDC zip first, then every Python step and the matching R script run in the same order as the [manual recipe in](pipeline/PIPELINE.md#manual-step-by-step-order) `pipeline/PIPELINE.md` (01 → 02 → 04 → 03a–03f, with 01/02/03a–c/03e/03f each followed by their `*_plots.R` where applicable; 03d is R-only).
+`./run` is the entry point (Bash wrapper around `pipeline/run_all.sh`). Missing Meta baseline GPKGs are built from the PDC zip first. Order: 01 → 01b → 02 → 04a → 04b → 03a–03f, with matching `*_plots.R` (03d is R-only).
 
 ```bash
-# All selected cities in a country (clipped in step 01)
+# All selected cities in a country
 ./run --region PHL
 ./run --region KEN
 ./run --region MEX          # Mexico City, Puebla, León
 ./run --region IDN          # Medan, Banda Aceh
+./run --region LKA          # Colombo, Kandy
+./run --region COL          # Barranquilla, Cartagena
+./run --region ECU          # Cuenca, Guayaquil
+./run --region ZAF          # Cape Town, Garden Route
 
 # Event Meta footprint — one country at a time (no city clip)
-# Prep + the same 02–03f analysis as cities (CSVs/figures under outputs/figure/footprints/)
 ./run --footprint KEN
 ./run --footprint IDN
-./run --footprint PHL
 python pipeline/qa_footprints.py --footprint KEN
-# Labels only (skip SEM / figures):
-bash pipeline/run_footprint_prep.sh KEN --prep-only
+bash pipeline/run_footprint_prep.sh KEN --prep-only   # labels only
 
 # Every selected city in every country
 ./run --all
 ./run --all --no-basemap
 
-# Options (apply to the country run)
+# Options
 ./run --region KEN --ref-hour 8
 ./run --region KEN --poverty-source rwi
 ./run --region KEN --clip-source geob
 ./run --region PHL --start-from 03b
 ```
 
-To run scripts **manually** (or to see every `Rscript` line the wrapper uses), use only `pipeline/PIPELINE.md` **[→ Manual step-by-step order](pipeline/PIPELINE.md#manual-step-by-step-order)** so the list is not duplicated here.
+Manual Python/R lines: [`pipeline/PIPELINE.md`](pipeline/PIPELINE.md#manual-step-by-step-order).
 
 ### 2. Cross-city comparison
 
-After running per-region pipelines (or `./run --all`):
+After city runs (or `./run --all`):
 
 ```bash
 python cross-city/run_cross_city_table.py --aggregate-only
-python cross-city/run_cross_city_table.py --regions PHL,KEN,MEX
+python cross-city/run_cross_city_table.py --regions PHL,KEN,MEX,IDN,LKA,COL,ECU,ZAF
+Rscript cross-city/figures_cross_city.R
 ```
 
-**Figures:** `Rscript cross-city/figures_cross_city.R` (PNGs in `figure/cross-city/`).
+Tables include Table 1 (Meta vs WorldPop), Table 1b (coverage \(C_c\)), Table 2 (SEM τ), Table 2b–2d (Meta-count / censoring robustness), Table 4c (crisis inference sensitivity). Figures: `figure/cross-city/`.
 
-### 3. Cross-country comparison (Meta event footprints)
+### 3. Cross-country comparison (event footprints)
 
 After `./run --footprint COUNTRY` for each country:
 
 ```bash
 python cross-city/run_cross_country_table.py
+Rscript cross-city/figures_cross_country.R
 ```
 
-**Figures:** `Rscript cross-city/figures_cross_country.R` (tables in `outputs/cross-country/`; PNGs in `figure/cross-country/`). Residual maps are not produced.
-
-Tables, figure filenames, and options: `cross-city/README.md`.
+Tables in `outputs/cross-country/`; figures in `figure/cross-country/` (no residual-map panel). Details: [`cross-city/README.md`](cross-city/README.md).
 
 ## Data defaults
 
-Poverty defaults to **GRDI v1.10** at `data/raw/povmap-grdi-v1-10.tif` (global GeoTIFF; place the file there, it is gitignored). WorldPop country rasters live in `data/raw/worldpop/` (also gitignored). Per-region Meta RWI CSVs stay in `config/regions.json` under `poverty` for `--poverty-source rwi`.
-
-Override defaults from `config/regions.json` with CLI flags, e.g.:
+Poverty defaults to **GRDI v1.10** at `data/raw/povmap-grdi-v1-10.tif` (gitignored). WorldPop country rasters live in `data/raw/worldpop/` (also gitignored). Per-region Meta RWI CSVs stay in `config/regions.json` under `poverty` for `--poverty-source rwi`.
 
 ```bash
 python pipeline/01_harmonise_datasets.py --region KEN_Nairobi
@@ -115,8 +131,6 @@ python pipeline/01_harmonise_datasets.py --region KEN_Nairobi --poverty-source r
 python pipeline/01_harmonise_datasets.py --worldpop /path/to.tif --meta /path/to.gpkg --poverty /path/to/poverty.tif
 python pipeline/01_harmonise_datasets.py --filter-by both --filter-min 50
 ```
-
-
 
 ## License
 

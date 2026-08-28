@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-04 — Allocation difference in person units (counterfactual totals on the step-02 sample).
+04a — Baseline allocation impact.
+
+How many people would need to be spatially reallocated for the two baseline
+patterns to match? (Crisis-inference sensitivity is 04b_crisis_inference.py.)
 
 Uses quadkeys from harmonised_with_residual.gpkg (same rows as script 02). Conditional
 shares on that sample sum to 1:
@@ -126,7 +129,7 @@ def _metrics(delta: np.ndarray, total_ref: float) -> dict:
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="04 — Person-level allocation impact (counterfactuals)")
+    p = argparse.ArgumentParser(description="04a — Baseline allocation impact (counterfactuals)")
     p.add_argument("-i", "--input", type=Path, default=None, help="harmonised_with_residual.gpkg from step 02")
     p.add_argument("-o", "--output-dir", type=Path, default=None, help="Region output root (default: outputs or outputs/{region})")
     p.add_argument("--region", type=str, default=None, help="Region code; sets input/output paths via config")
@@ -213,7 +216,7 @@ def main():
     pd.DataFrame([row]).to_csv(summary_path, index=False)
 
     print("=" * 60)
-    print("04 — Allocation impact (person units, conditional shares on this sample)")
+    print("04a — Baseline allocation impact (person units, conditional shares on this sample)")
     print("=" * 60)
     print(f"  Input: {input_path}")
     print(f"  Cells: {len(gdf)}, total WorldPop: {T_wp:.2f}, total Meta: {T_meta:.2f}")

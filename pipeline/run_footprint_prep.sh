@@ -97,6 +97,7 @@ GEO_03c="data/processed/footprints/${FOOTPRINT}/03c_spatial_regression"
 CSV_03e="outputs/footprints/${FOOTPRINT}/03e_causal"
 CSV_03f="outputs/footprints/${FOOTPRINT}/03f_robustness"
 CSV_04="outputs/footprints/${FOOTPRINT}/04_impact"
+CSV_04b="outputs/footprints/${FOOTPRINT}/04b_crisis_inference"
 
 if [[ "$PREP_ONLY" == true ]]; then
   echo ""
@@ -119,9 +120,14 @@ echo "[5] 02 plots..."
 Rscript "$SCRIPTS/02_plots.R" -i "$GPKG_02" "${R_FP[@]}"
 
 echo ""
-echo "[6] Allocation impact (04)..."
+echo "[6] 04a baseline allocation impact..."
 "$PYTHON" "$SCRIPTS/04_impact.py" --footprint "$FOOTPRINT"
 Rscript "$SCRIPTS/04_plots.R" -i "$CSV_04" "${R_FP[@]}"
+
+echo ""
+echo "[6b] 04b crisis inference sensitivity..."
+"$PYTHON" "$SCRIPTS/04b_crisis_inference.py" --footprint "$FOOTPRINT"
+Rscript "$SCRIPTS/04b_plots.R" -i "$CSV_04b" "${R_FP[@]}"
 
 echo ""
 echo "[7] 03a regression..."

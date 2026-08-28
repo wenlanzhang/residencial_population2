@@ -619,6 +619,36 @@ def main():
     print(f"\nSaved: {tbl1_path}")
     print(df.to_string(index=False))
 
+    # Table 1b — Meta coverage of the independent city grid (01b)
+    import region_config
+    tbl1b_rows = []
+    for region in regions:
+        p = region_config.csv_dir(region, "01b_coverage") / "Table_meta_coverage.csv"
+        if not p.exists():
+            print(f"  Skipped {region} for Table 1b: no Table_meta_coverage.csv")
+            continue
+        d = pd.read_csv(p)
+        d.insert(0, "Country", region_config.country_display_name(region))
+        tbl1b_rows.append(d)
+    if tbl1b_rows:
+        df1b = pd.concat(tbl1b_rows, ignore_index=True)
+        keep1b = [
+            c for c in (
+                "Country", "city", "region", "zoom",
+                "N_grid", "N_published", "N_missing", "C_c",
+                "median_WP_published", "median_WP_missing",
+                "median_GRDI_published", "median_GRDI_missing",
+            ) if c in df1b.columns
+        ]
+        df1b = df1b[keep1b].rename(columns={"city": "City", "region": "Region"})
+        tbl1b_path = out_dir / "Table1b_meta_coverage.csv"
+        df1b.to_csv(tbl1b_path, index=False)
+        print(f"\nSaved: {tbl1b_path}")
+        print("Table 1b — Meta coverage of the eligible city grid (C_c = N_published / N_grid)")
+        print(df1b.to_string(index=False))
+    else:
+        print("\nTable 1b skipped: no 01b Table_meta_coverage.csv files.")
+
     # Table 2 — Poverty Effect (Spatially Corrected)
     tbl2_rows = []
     for region in regions:
@@ -646,6 +676,79 @@ def main():
     else:
         print("\nTable 2 skipped: no 03c outputs. Run without --aggregate-only to generate.")
 
+    # Table 2b — Meta-count SEM sensitivity (03f)
+    import region_config
+    tbl2b_rows = []
+    for region in regions:
+        p = region_config.csv_dir(region, "03f_robustness") / "Table_meta_count_sensitivity.csv"
+        if not p.exists():
+            print(f"  Skipped {region} for Table 2b: no Table_meta_count_sensitivity.csv")
+            continue
+        d = pd.read_csv(p)
+        d.insert(0, "Country", region_config.country_display_name(region))
+        d.insert(1, "City", region_config.display_label(region))
+        d.insert(2, "Region", region)
+        tbl2b_rows.append(d)
+    if tbl2b_rows:
+        df2b = pd.concat(tbl2b_rows, ignore_index=True)
+        tbl2b_path = out_dir / "Table2b_meta_count_sensitivity.csv"
+        df2b.to_csv(tbl2b_path, index=False)
+        print(f"\nSaved: {tbl2b_path}")
+    else:
+        print("\nTable 2b skipped: no 03f Table_meta_count_sensitivity.csv files.")
+
+    # Table 2c — Meta-count composition diagnostic (03f)
+    tbl2c_rows = []
+    for region in regions:
+        p = region_config.csv_dir(region, "03f_robustness") / "Table_meta_count_composition.csv"
+        if not p.exists():
+            print(f"  Skipped {region} for Table 2c: no Table_meta_count_composition.csv")
+            continue
+        d = pd.read_csv(p)
+        d.insert(0, "Country", region_config.country_display_name(region))
+        d.insert(1, "City", region_config.display_label(region))
+        d.insert(2, "Region", region)
+        tbl2c_rows.append(d)
+    if tbl2c_rows:
+        df2c = pd.concat(tbl2c_rows, ignore_index=True)
+        keep2c = [
+            c for c in (
+                "Country", "City", "Region", "meta_count_group", "n",
+                "median_grdi", "pct_high_deprivation", "median_allocation_residual",
+                "median_worldpop", "median_meta", "median_density", "median_distance",
+            ) if c in df2c.columns
+        ]
+        df2c = df2c[keep2c].rename(columns={"median_allocation_residual": "median_R"})
+        tbl2c_path = out_dir / "Table2c_meta_count_composition.csv"
+        df2c.to_csv(tbl2c_path, index=False)
+        print(f"\nSaved: {tbl2c_path}")
+        print("Table 2c — Meta-count composition")
+        print(df2c.to_string(index=False))
+    else:
+        print("\nTable 2c skipped: no 03f Table_meta_count_composition.csv files.")
+
+    # Table 2d — Missing-cell privacy-censoring sensitivity (03f-D)
+    tbl2d_rows = []
+    for region in regions:
+        p = region_config.csv_dir(region, "03f_robustness") / "Table_meta_count_censoring_sensitivity.csv"
+        if not p.exists():
+            print(f"  Skipped {region} for Table 2d: no Table_meta_count_censoring_sensitivity.csv")
+            continue
+        d = pd.read_csv(p)
+        d.insert(0, "Country", region_config.country_display_name(region))
+        d.insert(1, "City", region_config.display_label(region))
+        d.insert(2, "Region", region)
+        tbl2d_rows.append(d)
+    if tbl2d_rows:
+        df2d = pd.concat(tbl2d_rows, ignore_index=True)
+        tbl2d_path = out_dir / "Table2d_meta_censoring_sensitivity.csv"
+        df2d.to_csv(tbl2d_path, index=False)
+        print(f"\nSaved: {tbl2d_path}")
+        print("Table 2d — Missing-cell privacy-censoring sensitivity")
+        print(df2d.to_string(index=False))
+    else:
+        print("\nTable 2d skipped: no 03f Table_meta_count_censoring_sensitivity.csv files.")
+
     # Rank instability (03b)
     rank_rows = []
     for region in regions:
@@ -667,6 +770,81 @@ def main():
         print(df_rank.to_string(index=False))
     else:
         print("\nRank instability cross-city table skipped: no 03b Table_rank_instability.csv files found.")
+
+    # Table 4c — Crisis inference sensitivity (04b)
+    tbl4c_rows = []
+    for region in regions:
+        p = region_config.csv_dir(region, "04b_crisis_inference") / "Table4c_crisis_inference_sensitivity.csv"
+        if not p.exists():
+            print(f"  Skipped {region} for Table 4c: no Table4c_crisis_inference_sensitivity.csv")
+            continue
+        d = pd.read_csv(p)
+        if "country" not in d.columns:
+            d.insert(0, "country", region_config.country_display_name(region))
+        if "city" not in d.columns:
+            d.insert(1, "city", region_config.display_label(region))
+        if "region" not in d.columns:
+            d.insert(2, "region", region)
+        tbl4c_rows.append(d)
+    if tbl4c_rows:
+        df4c = pd.concat(tbl4c_rows, ignore_index=True)
+        keep4c = [
+            c for c in (
+                "country", "city", "region", "time", "n",
+                "direction_flip_pct",
+                "jaccard_increase_top10", "jaccard_decrease_top10",
+                "flip_pct_high_deprivation", "flip_pct_other", "delta_F", "rr_F",
+                "n_snapshots", "median_F_t", "F_t_min", "F_t_max",
+                "F_t_iqr_lo", "F_t_iqr_hi",
+                "median_J_inc_t", "median_J_dec_t",
+                "median_sensitivity_high_deprivation", "median_sensitivity_other",
+                "delta_S",
+            ) if c in df4c.columns
+        ]
+        df4c = df4c[keep4c]
+        for col, nd in (
+            ("direction_flip_pct", 2),
+            ("jaccard_increase_top10", 3),
+            ("jaccard_decrease_top10", 3),
+            ("flip_pct_high_deprivation", 2),
+            ("flip_pct_other", 2),
+            ("delta_F", 2),
+            ("rr_F", 2),
+            ("median_F_t", 2),
+            ("F_t_min", 2),
+            ("F_t_max", 2),
+            ("F_t_iqr_lo", 2),
+            ("F_t_iqr_hi", 2),
+            ("median_J_inc_t", 3),
+            ("median_J_dec_t", 3),
+            ("median_sensitivity_high_deprivation", 4),
+            ("median_sensitivity_other", 4),
+            ("delta_S", 4),
+        ):
+            if col in df4c.columns:
+                df4c[col] = df4c[col].round(nd)
+        tbl4c_path = out_dir / "Table4c_crisis_inference_sensitivity.csv"
+        df4c.to_csv(tbl4c_path, index=False)
+        print(f"\nSaved: {tbl4c_path}")
+        print("Table 4c — Crisis inference sensitivity")
+        print(df4c.to_string(index=False))
+    else:
+        print("\nTable 4c skipped: no 04b Table4c_crisis_inference_sensitivity.csv files.")
+
+    tbl4d_rows = []
+    for region in regions:
+        p = region_config.csv_dir(region, "04b_crisis_inference") / "Table4d_crisis_snapshots.csv"
+        if not p.exists():
+            continue
+        d = pd.read_csv(p)
+        tbl4d_rows.append(d)
+    if tbl4d_rows:
+        df4d = pd.concat(tbl4d_rows, ignore_index=True)
+        tbl4d_path = out_dir / "Table4d_crisis_snapshots.csv"
+        df4d.to_csv(tbl4d_path, index=False)
+        print(f"\nSaved: {tbl4d_path} ({len(df4d)} city-day rows)")
+    else:
+        print("\nTable 4d skipped: no 04b Table4d_crisis_snapshots.csv files.")
 
 
 if __name__ == "__main__":
