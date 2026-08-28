@@ -7,11 +7,15 @@
 ## Usage
 
 ```bash
-# All selected cities in a country
+# All selected cities in a country (21 cities: PHL, KEN, MEX, IDN, LKA, COL, ECU, ZAF)
 ./run --region PHL
 ./run --region KEN
 ./run --region MEX
 ./run --region IDN
+./run --region LKA
+./run --region COL
+./run --region ECU
+./run --region ZAF
 ```
 
 **Event footprints** (Meta crisis AOI, not a city clip) use the **same countries** as `./run --region COUNTRY`.
@@ -77,11 +81,11 @@ python pipeline/qa_footprints.py --footprint KEN
 4. `lon_range` / `lat_range`: used for auto-detecting region from data centroid.
 5. **PDC (Meta baseline)**: `pdc_raw_dir` = Meta event `.zip` or unzipped folder under `data_root` (CSVs are read from the zip in memory; unzipping is optional). `pdc_processed_csv` = optional intermediate. `pdc_use_baseline_column` (optional): if omitted, auto-detected — data spans 14+ days → 7-day shift; under 14 days → use n_baseline from CSV (if present). Set `true` or `false` to override.
 
-6. **Shared PDC extracts**: Philippines cities share WorldPop, poverty, and the Basyang Meta file (only the clip differs). Kenya cities share the floods extract; Mexico cities share the central-earthquake extract. `./run --region IDN` (etc.) runs the **cities**. Country keys with `clip_shape` unset (IDN, LKA, COL, ECU, ZAF) stay in `regions.json` as data donors for those cities and for `./run --footprint COUNTRY`; they are not a city-pipeline product. City folders share that baseline GPKG and set `clip_source` to `geob` (geoBoundaries ADM2).
+6. **Shared PDC extracts**: Cities in one country share WorldPop, poverty, and the country Meta baseline GPKG; only the clip differs. `./run --region IDN` (etc.) runs the **cities**. ISO3-only keys with `clip_shape` unset (`IDN`, `LKA`, `COL`, `ECU`, `ZAF`) stay in `regions.json` as data donors for those cities and for `./run --footprint COUNTRY`; they are not themselves a city run. PHL / KEN / MEX cities use local `clip_shape` files; IDN onward use `clip_source: geob`.
 
 ## Output layout
 
 `./run --region KEN` writes tables to `outputs/city/KEN/{Nairobi,Mombasa,...}/` and figures to `figure/city/KEN/{city}/`.  
-`./run --region MEX` runs `MEX_MexicoCity`, `MEX_Puebla`, and `MEX_Leon`.  
+`./run --region MEX` runs `MEX_MexicoCity`, `MEX_Puebla`, and `MEX_Leon`. Same pattern for IDN, LKA, COL, ECU, ZAF.  
 Meta snapshot hour is Pacific time, chosen to sit near evening locally: **16** Kenya / South Africa; **8** Philippines / Indonesia / Sri Lanka; **0** Mexico / Colombia / Ecuador. Default baseline method is **n_baseline**.  
 `./run --footprint KEN` writes `outputs/footprints/KEN/` (and QA under `outputs/footprints/qa/`).

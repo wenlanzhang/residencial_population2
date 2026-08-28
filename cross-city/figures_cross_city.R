@@ -699,4 +699,384 @@ if (!is.null(p4) && !is.null(p5) && has_patchwork) {
   message("Saved: ", file.path(fig_dir, "03c_forest_scatter.png"))
 }
 
+# ---- SEM τ vs city GRDI (context) and within-city GRDI gap (dose) ----
+# τ is a within-city contrast (top GRDI quartile vs rest). Median GRDI is city
+# context; the T=1 vs T=0 median gap is the treatment contrast on the same cells.
+if (nrow(fig4_data) > 0) {
+  has_ggrepel <- requireNamespace("ggrepel", quietly = TRUE)
+  grdi_rows <- lapply(seq_len(nrow(fig4_data)), function(i) {
+    city <- fig4_data$City[[i]]
+    reg <- city_to_reg[[city]]
+    if (is.null(reg)) return(NULL)
+    path <- find_artifact(reg, "02", "harmonised_with_residual.gpkg")
+    if (is.null(path)) return(NULL)
+    gdf <- st_read(path, quiet = TRUE)
+    if (!("poverty_mean" %in% names(gdf))) return(NULL)
+    pov <- as.numeric(gdf$poverty_mean)
+    res <- if ("allocation_residual" %in% names(gdf)) {
+      as.numeric(gdf$allocation_residual)
+    } else {
+      rep(0, length(pov))
+    }
+    ok <- is.finite(pov) & is.finite(res)
+    if ("poverty_n_pixels" %in% names(gdf)) {
+      ok <- ok & is.finite(as.numeric(gdf$poverty_n_pixels)) &
+        as.numeric(gdf$poverty_n_pixels) > 0
+    }
+    pov <- pov[ok]
+    if (length(pov) < 8) return(NULL)
+    q75 <- as.numeric(stats::quantile(pov, 0.75, names = FALSE, type = 7))
+    high <- pov >= q75
+    if (!any(high) || !any(!high)) return(NULL)
+    data.frame(
+      City = city,
+      Region = as.character(reg),
+      n_grdi = length(pov),
+      median_grdi = stats::median(pov),
+      q75_grdi = q75,
+      median_grdi_high = stats::median(pov[high]),
+      median_grdi_other = stats::median(pov[!high]),
+      grdi_gap = stats::median(pov[high]) - stats::median(pov[!high]),
+      stringsAsFactors = FALSE
+    )
+  })
+  df_grdi <- bind_rows(Filter(Negate(is.null), grdi_rows))
+  if (nrow(df_grdi) >= 2) {
+    df_tg <- fig4_data %>%
+      inner_join(df_grdi, by = "City")
+    df_tg$sig_lab <- ifelse(df_tg$sig, "p < 0.05", "p >= 0.05")
+    df_tg$sig_lab <- factor(df_tg$sig_lab, levels = c("p < 0.05", "p >= 0.05"))
+    country_order <- c(
+      "Philippines", "Kenya", "Mexico", "Indonesia",
+      "Sri Lanka", "Colombia", "Ecuador", "South Africa"
+    )
+    df_tg$Country <- factor(
+      df_tg$Country,
+      levels = c(
+        intersect(country_order, unique(as.character(df_tg$Country))),
+        setdiff(unique(as.character(df_tg$Country)), country_order)
+      )
+    )
+    grdi_csv <- df_tg[, c(
+      "Country", "City", "Region", "tau", "SE", "p", "CI_lo", "CI_hi", "sig",
+      "n_grdi", "median_grdi", "q75_grdi", "median_grdi_high",
+      "median_grdi_other", "grdi_gap"
+    )]
+    grdi_path <- file.path(tbl_dir, "Table_tau_vs_city_grdi.csv")
+    dir.create(tbl_dir, recursive = TRUE, showWarnings = FALSE)
+    write.csv(grdi_csv, grdi_path, row.names = FALSE)
+    message("Saved: ", grdi_path)
+
+    y_lo <- min(df_tg$CI_lo, na.rm = TRUE)
+    y_hi <- max(df_tg$CI_hi, na.rm = TRUE)
+    y_pad <- 0.08 * if (y_hi > y_lo) y_hi - y_lo else 1
+    theme_tg <- theme_minimal(base_size = 11) +
+      theme(
+        plot.title = element_text(face = "bold", size = 11, hjust = 0),
+        plot.subtitle = element_text(colour = "grey40", size = 9, hjust = 0),
+        panel.grid.minor = element_blank(),
+        legend.position = "bottom",
+        legend.justification = "left",
+        legend.box = "vertical"
+      )
+    scatter_tau_grdi <- function(df, x_col, title, subtitle, xlab) {
+      p <- ggplot(df, aes(x = .data[[x_col]], y = tau, colour = Country, shape = sig_lab)) +
+        geom_hline(yintercept = 0, linetype = "dashed", colour = "grey55", linewidth = 0.5) +
+        geom_linerange(
+          aes(ymin = CI_lo, ymax = CI_hi),
+          linewidth = 0.45, alpha = 0.7, show.legend = FALSE
+        ) +
+        geom_point(size = 2.8, stroke = 0.95) +
+        scale_colour_manual(
+          values = ARMYROSE_COUNTRY, breaks = levels(df$Country), name = NULL
+        ) +
+        scale_shape_manual(
+          values = c("p < 0.05" = 16, "p >= 0.05" = 1), name = NULL
+        ) +
+        guides(
+          colour = guide_legend(override.aes = list(shape = 16, linetype = 0), nrow = 2),
+          shape = guide_legend(override.aes = list(colour = "grey30"))
+        ) +
+        coord_cartesian(ylim = c(y_lo - y_pad, y_hi + y_pad)) +
+        labs(title = title, subtitle = subtitle, x = xlab, y = "SEM \u03c4  (high-poverty quartile vs rest)") +
+        theme_tg
+      if (has_ggrepel) {
+        p <- p + ggrepel::geom_text_repel(
+          aes(label = City),
+          size = 2.45, seed = 1, max.overlaps = Inf,
+          min.segment.length = 0.15, box.padding = 0.28, point.padding = 0.25,
+          segment.colour = "grey70", segment.size = 0.3,
+          show.legend = FALSE
+        )
+      } else {
+        p <- p + geom_text(
+          aes(label = City),
+          nudge_y = y_pad * 0.35, size = 2.4, show.legend = FALSE
+        )
+      }
+      p
+    }
+    p_ctx <- scatter_tau_grdi(
+      df_tg, "median_grdi",
+      "A. City-level deprivation",
+      "Same analysis cells as the SEM. No fitted line.",
+      "Median GRDI (analysis cells)"
+    )
+    p_dose <- scatter_tau_grdi(
+      df_tg, "grdi_gap",
+      "B. Within-city deprivation contrast",
+      "Median GRDI of the high-poverty quartile minus the rest.",
+      "GRDI gap  (T = 1 \u2212 T = 0)"
+    )
+    f_tg <- file.path(fig_dir, "03c_tau_vs_city_grdi.png")
+    if (has_patchwork) {
+      p_tg <- (p_ctx | p_dose) +
+        patchwork::plot_layout(guides = "collect") +
+        patchwork::plot_annotation(
+          title = "Poverty bias vs city deprivation",
+          subtitle = "\u03c4 is a within-city contrast (top GRDI quartile vs rest). Left: how deprived the city is. Right: how large that quartile contrast is."
+        ) &
+        theme(
+          legend.position = "bottom",
+          plot.title = element_text(face = "bold", size = 12, hjust = 0),
+          plot.subtitle = element_text(colour = "grey40", size = 9, hjust = 0)
+        )
+      ggsave(f_tg, p_tg, width = 11.8, height = 6.4, dpi = 300, bg = "white")
+      message("Saved: ", f_tg)
+    } else {
+      f_ctx <- file.path(fig_dir, "03c_tau_vs_median_grdi.png")
+      f_dose <- file.path(fig_dir, "03c_tau_vs_grdi_gap.png")
+      ggsave(f_ctx, p_ctx, width = 6.4, height = 5.6, dpi = 300, bg = "white")
+      ggsave(f_dose, p_dose, width = 6.4, height = 5.6, dpi = 300, bg = "white")
+      message("Saved: ", f_ctx)
+      message("Saved: ", f_dose)
+    }
+  }
+}
+
+# ---- 04b crisis inference sensitivity (cross-city) ----
+tbl4c_path <- file.path(tbl_dir, "Table4c_crisis_inference_sensitivity.csv")
+if (file.exists(tbl4c_path)) {
+  t4c <- read.csv(tbl4c_path, stringsAsFactors = FALSE)
+  need4c <- c("country", "city", "direction_flip_pct")
+  if (all(need4c %in% names(t4c)) && nrow(t4c) > 0) {
+    country_order <- c(
+      "Philippines", "Kenya", "Mexico", "Indonesia",
+      "Sri Lanka", "Colombia", "Ecuador", "South Africa"
+    )
+    t4c$country <- factor(
+      t4c$country,
+      levels = c(intersect(country_order, unique(t4c$country)), setdiff(unique(t4c$country), country_order))
+    )
+    t4c <- t4c[order(t4c$country, t4c$city), ]
+    axis_rows <- list()
+    city_rows <- list()
+    y <- 0
+    first_group <- TRUE
+    for (country in levels(t4c$country)) {
+      sub <- t4c[t4c$country == country, , drop = FALSE]
+      if (nrow(sub) == 0) next
+      if (!first_group) y <- y - 0.22
+      first_group <- FALSE
+      hex <- unname(ARMYROSE_COUNTRY[country])
+      if (length(hex) != 1 || is.na(hex)) hex <- ARMYROSE[[7]]
+      axis_rows[[length(axis_rows) + 1]] <- data.frame(
+        y = y, Label = country, label_color = hex, face = "bold",
+        stringsAsFactors = FALSE
+      )
+      y <- y - 0.58
+      for (i in seq_len(nrow(sub))) {
+        row <- sub[i, ]
+        city_rows[[length(city_rows) + 1]] <- data.frame(
+          y = y,
+          city = row$city,
+          country = as.character(row$country),
+          hex = hex,
+          flip = if ("median_F_t" %in% names(row) && is.finite(as.numeric(row$median_F_t))) {
+            as.numeric(row$median_F_t)
+          } else {
+            as.numeric(row$direction_flip_pct)
+          },
+          j_inc = if ("jaccard_increase_top10" %in% names(row)) as.numeric(row$jaccard_increase_top10) else NA_real_,
+          j_dec = if ("jaccard_decrease_top10" %in% names(row)) as.numeric(row$jaccard_decrease_top10) else NA_real_,
+          delta_s = if ("delta_S" %in% names(row)) as.numeric(row$delta_S) else NA_real_,
+          delta_f = if ("delta_F" %in% names(row)) as.numeric(row$delta_F) else NA_real_,
+          f_min = if ("F_t_min" %in% names(row)) as.numeric(row$F_t_min) else NA_real_,
+          f_max = if ("F_t_max" %in% names(row)) as.numeric(row$F_t_max) else NA_real_,
+          f_iqr_lo = if ("F_t_iqr_lo" %in% names(row)) as.numeric(row$F_t_iqr_lo) else NA_real_,
+          f_iqr_hi = if ("F_t_iqr_hi" %in% names(row)) as.numeric(row$F_t_iqr_hi) else NA_real_,
+          stringsAsFactors = FALSE
+        )
+        axis_rows[[length(axis_rows) + 1]] <- data.frame(
+          y = y,
+          Label = paste0("  ", row$city),
+          label_color = "grey25",
+          face = "plain",
+          stringsAsFactors = FALSE
+        )
+        y <- y - 0.70
+      }
+    }
+    axis_df4 <- bind_rows(axis_rows)
+    city_df4 <- bind_rows(city_rows)
+    h4 <- max(4.8, 0.28 * nrow(axis_df4) + 1.6)
+    y_lim <- c(y + 0.28, 0.38)
+    theme_04b <- theme_minimal(base_size = 11) +
+      theme(
+        plot.title = element_text(face = "bold", size = 11, hjust = 0),
+        plot.subtitle = element_text(size = 9, colour = "grey35", hjust = 0),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "bottom",
+        legend.justification = "left",
+        plot.margin = margin(6, 10, 6, 88)
+      )
+
+    xmax_f <- max(c(city_df4$flip, city_df4$f_max), na.rm = TRUE)
+    pad_f <- 0.08 * if (is.finite(xmax_f) && xmax_f > 0) xmax_f else 1
+    p_flip <- ggplot() +
+      geom_segment(
+        data = city_df4 %>% filter(is.finite(f_min), is.finite(f_max)),
+        aes(x = f_min, xend = f_max, y = y, yend = y),
+        colour = "grey70", linewidth = 0.45
+      ) +
+      geom_segment(
+        data = city_df4 %>% filter(is.finite(f_iqr_lo), is.finite(f_iqr_hi)),
+        aes(x = f_iqr_lo, xend = f_iqr_hi, y = y, yend = y),
+        colour = "grey35", linewidth = 1.35
+      ) +
+      geom_point(
+        data = city_df4,
+        aes(x = flip, y = y, colour = hex),
+        size = 2.6
+      ) +
+      geom_text(
+        data = axis_df4,
+        aes(x = -pad_f * 0.15, y = y, label = Label, colour = label_color, fontface = face),
+        hjust = 1, size = 3.05
+      ) +
+      scale_colour_identity() +
+      coord_cartesian(xlim = c(0, xmax_f + pad_f * 1.2), ylim = y_lim, clip = "off") +
+      labs(
+        title = "A. Direction instability",
+        subtitle = "Dot: median daily flip rate. Thick bar: IQR. Thin bar: min\u2013max.",
+        x = "Cells changing inferred direction (%)",
+        y = NULL
+      ) +
+      theme_04b
+
+    jac_long <- bind_rows(
+      city_df4 %>% transmute(y, hex, val = j_inc, kind = "Increase hotspots"),
+      city_df4 %>% transmute(y, hex, val = j_dec, kind = "Decrease hotspots")
+    )
+    jac_long$kind <- factor(jac_long$kind, levels = c("Increase hotspots", "Decrease hotspots"))
+    p_jac <- ggplot() +
+      geom_point(
+        data = jac_long %>% filter(is.finite(val)),
+        aes(x = val, y = y, shape = kind, colour = hex),
+        size = 2.5, stroke = 0.9
+      ) +
+      geom_text(
+        data = axis_df4,
+        aes(x = -0.04, y = y, label = Label, colour = label_color, fontface = face),
+        hjust = 1, size = 3.05
+      ) +
+      scale_shape_manual(values = c("Increase hotspots" = 16, "Decrease hotspots" = 17), name = NULL) +
+      scale_colour_identity() +
+      coord_cartesian(xlim = c(0, 1.05), ylim = y_lim, clip = "off") +
+      labs(
+        title = "B. Crisis hotspot agreement",
+        x = expression(J[10]),
+        y = NULL
+      ) +
+      theme_04b
+
+    f_04b2 <- file.path(fig_dir, "04b_cross_city_crisis_sensitivity.png")
+    if (has_patchwork) {
+      p04b2 <- (p_flip | p_jac) +
+        patchwork::plot_annotation(
+          title = "Baseline representation substantially changes inferred crisis patterns"
+        )
+      ggsave(f_04b2, p04b2, width = 13.6, height = h4 + 0.35, dpi = 300, bg = "white")
+    } else if (requireNamespace("cowplot", quietly = TRUE)) {
+      p04b2 <- cowplot::plot_grid(p_flip, p_jac, ncol = 2, align = "h")
+      ggsave(f_04b2, p04b2, width = 13.6, height = h4, dpi = 300, bg = "white")
+    } else {
+      ggsave(file.path(fig_dir, "04b_direction_instability.png"), p_flip, width = 7.2, height = h4, dpi = 300, bg = "white")
+      ggsave(file.path(fig_dir, "04b_hotspot_agreement.png"), p_jac, width = 7.2, height = h4, dpi = 300, bg = "white")
+    }
+    message("Saved: ", f_04b2)
+
+    if (any(is.finite(city_df4$delta_f))) {
+      xmax_fdelta <- max(abs(city_df4$delta_f), na.rm = TRUE)
+      pad_fd <- 0.12 * if (is.finite(xmax_fdelta) && xmax_fdelta > 0) xmax_fdelta else 1
+      p_df <- ggplot() +
+        geom_vline(xintercept = 0, linetype = "dashed", colour = "grey55", linewidth = 0.5) +
+        geom_point(
+          data = city_df4 %>% filter(is.finite(delta_f)),
+          aes(x = delta_f, y = y, colour = hex),
+          size = 2.6
+        ) +
+        geom_text(
+          data = axis_df4,
+          aes(x = -xmax_fdelta - pad_fd * 0.35, y = y, label = Label, colour = label_color, fontface = face),
+          hjust = 1, size = 3.05
+        ) +
+        scale_colour_identity() +
+        coord_cartesian(
+          xlim = c(-xmax_fdelta - pad_fd, xmax_fdelta + pad_fd),
+          ylim = y_lim,
+          clip = "off"
+        ) +
+        labs(
+          title = "Difference in direction-flip probability",
+          subtitle = "Positive: deprived cells more likely to change inference. Negative: other cells more likely.",
+          x = "\u0394F (percentage points; high deprivation \u2212 other)",
+          y = NULL
+        ) +
+        theme_04b
+      f_04b3 <- file.path(fig_dir, "04b_socioeconomic_sensitivity.png")
+      ggsave(f_04b3, p_df, width = 8.6, height = h4, dpi = 300, bg = "white")
+      message("Saved: ", f_04b3)
+    }
+
+    if (any(is.finite(city_df4$delta_s))) {
+      xmax_s <- max(abs(city_df4$delta_s), na.rm = TRUE)
+      pad_s <- 0.12 * if (is.finite(xmax_s) && xmax_s > 0) xmax_s else 0.05
+      p_ds <- ggplot() +
+        geom_vline(xintercept = 0, linetype = "dashed", colour = "grey55", linewidth = 0.5) +
+        geom_point(
+          data = city_df4 %>% filter(is.finite(delta_s)),
+          aes(x = delta_s, y = y, colour = hex),
+          size = 2.6
+        ) +
+        geom_text(
+          data = axis_df4,
+          aes(x = -xmax_s - pad_s * 0.35, y = y, label = Label, colour = label_color, fontface = face),
+          hjust = 1, size = 3.05
+        ) +
+        scale_colour_identity() +
+        coord_cartesian(
+          xlim = c(-xmax_s - pad_s, xmax_s + pad_s),
+          ylim = y_lim,
+          clip = "off"
+        ) +
+        labs(
+          title = "Socioeconomic patterning of baseline-induced change-metric divergence",
+          subtitle = "S = |G_Meta \u2212 G_WP|; C cancels, so this is baseline discrepancy, not crisis inference",
+          x = expression(Delta * S[c] ~ "(high deprivation \u2212 other)"),
+          y = NULL
+        ) +
+        theme_04b
+      f_04b_s <- file.path(fig_dir, "04b_baseline_divergence_socioeconomic.png")
+      ggsave(f_04b_s, p_ds, width = 8.6, height = h4, dpi = 300, bg = "white")
+      message("Saved: ", f_04b_s)
+    }
+  }
+} else {
+  message("Table 4c not found; skipping 04b cross-city figures.")
+}
+
 message("\nCross-city figures saved to: ", fig_dir)

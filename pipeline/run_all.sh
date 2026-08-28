@@ -198,6 +198,8 @@ print('CSV_ROOT=' + str(rc.csv_dir(r)))
 print('FIG_ROOT=' + str(rc.figure_dir(r)))
 print('GEO_ROOT=' + str(rc.geo_dir(r)))
 print('GPKG_01=' + str(rc.geo_dir(r, '01') / 'harmonised_meta_worldpop.gpkg'))
+print('GPKG_01b=' + str(rc.geo_dir(r, '01b_coverage') / 'independent_grid.gpkg'))
+print('CSV_01b=' + str(rc.csv_dir(r, '01b_coverage')))
 print('GPKG_02=' + str(rc.geo_dir(r, '02') / 'harmonised_with_residual.gpkg'))
 print('CSV_03a=' + str(rc.csv_dir(r, '03a_regression')))
 print('CSV_03b=' + str(rc.csv_dir(r, '03b_stratified')))
@@ -205,6 +207,7 @@ print('GEO_03c=' + str(rc.geo_dir(r, '03c_spatial_regression')))
 print('CSV_03e=' + str(rc.csv_dir(r, '03e_causal')))
 print('CSV_03f=' + str(rc.csv_dir(r, '03f_robustness')))
 print('CSV_04=' + str(rc.csv_dir(r, '04_impact')))
+print('CSV_04b=' + str(rc.csv_dir(r, '04b_crisis_inference')))
 print('OUT_ROOT=' + str(rc.csv_dir(r)))
 ")"
   R_REGION_ARGS=(--region "$REGION")
@@ -213,6 +216,8 @@ else
   FIG_ROOT="$PROJECT_ROOT/figure"
   GEO_ROOT="$PROJECT_ROOT/data/processed"
   GPKG_01="$GEO_ROOT/01/harmonised_meta_worldpop.gpkg"
+  GPKG_01b="$GEO_ROOT/01b_coverage/independent_grid.gpkg"
+  CSV_01b="$CSV_ROOT/01b_coverage"
   GPKG_02="$GEO_ROOT/02/harmonised_with_residual.gpkg"
   CSV_03a="$CSV_ROOT/03a_regression"
   CSV_03b="$CSV_ROOT/03b_stratified"
@@ -220,25 +225,27 @@ else
   CSV_03e="$CSV_ROOT/03e_causal"
   CSV_03f="$CSV_ROOT/03f_robustness"
   CSV_04="$CSV_ROOT/04_impact"
+  CSV_04b="$CSV_ROOT/04b_crisis_inference"
   OUT_ROOT="$CSV_ROOT"
   R_REGION_ARGS=()
 fi
 
-# Steps in order: 01 < 02 < 04 < 03a < 03b < 03c < 03d < 03e < 03f
+# Steps in order: 01 < 02 < 04 < 04b < 03a < 03b < 03c < 03d < 03e < 03f
 _run_step() {
   local step="$1"
   if [ -z "$START_FROM" ]; then
     return 0
   fi
   case "$START_FROM" in
-    01|02|04|03a|03b|03c|03d|03e|03f) ;;
-    *) echo "Unknown --start-from: $START_FROM (use: 01, 02, 04, 03a, 03b, 03c, 03d, 03e, 03f)"; exit 1 ;;
+    01|02|04|04b|03a|03b|03c|03d|03e|03f) ;;
+    *) echo "Unknown --start-from: $START_FROM (use: 01, 02, 04, 04b, 03a, 03b, 03c, 03d, 03e, 03f)"; exit 1 ;;
   esac
   # Skip if this step is before START_FROM (case-based, no arithmetic)
   case "$step" in
-    01) case "$START_FROM" in 02|04|03a|03b|03c|03d|03e|03f) return 1 ;; esac ;;
-    02) case "$START_FROM" in 04|03a|03b|03c|03d|03e|03f) return 1 ;; esac ;;
-    04) case "$START_FROM" in 03a|03b|03c|03d|03e|03f) return 1 ;; esac ;;
+    01) case "$START_FROM" in 02|04|04b|03a|03b|03c|03d|03e|03f) return 1 ;; esac ;;
+    02) case "$START_FROM" in 04|04b|03a|03b|03c|03d|03e|03f) return 1 ;; esac ;;
+    04) case "$START_FROM" in 04b|03a|03b|03c|03d|03e|03f) return 1 ;; esac ;;
+    04b) case "$START_FROM" in 03a|03b|03c|03d|03e|03f) return 1 ;; esac ;;
     03a) case "$START_FROM" in 03b|03c|03d|03e|03f) return 1 ;; esac ;;
     03b) case "$START_FROM" in 03c|03d|03e|03f) return 1 ;; esac ;;
     03c) case "$START_FROM" in 03d|03e|03f) return 1 ;; esac ;;
@@ -307,12 +314,20 @@ if _run_step "01"; then
     [[ "$CLIP_REFRESH" == true ]] && HARMONISE_ARGS+=(--clip-refresh)
     "$PYTHON" "$SCRIPTS/01_harmonise_datasets.py" "${HARMONISE_ARGS[@]}"
   fi
+  echo ""
+  echo "[1b/15] Meta coverage QA (01b)..."
+  if [[ -n "$REGION" ]]; then
+    "$PYTHON" "$SCRIPTS/01b_meta_coverage_qa.py" --region "$REGION"
+    Rscript "$SCRIPTS/01b_plots.R" -i "$GPKG_01b" "${R_REGION_ARGS[@]}"
+  else
+    echo "  01b skipped (needs --region)"
+  fi
 else
   echo ""
   echo "[1/15] Harmonise skipped (--start-from $START_FROM)"
 fi
 
-# 1b. Descriptive plots
+# Descriptive plots (01)
 if _run_step "02"; then
   echo ""
   echo "[2/15] Descriptive plots (01_plot_descriptive.R)..."
@@ -345,21 +360,38 @@ else
   echo "[4/15] 02 plots skipped"
 fi
 
-# 04. Person-level allocation impact (counterfactuals; needs GPKG_02)
+# 04a. Baseline allocation impact (counterfactuals; needs GPKG_02)
 if _run_step "04"; then
   echo ""
-  echo "[5/15] Allocation impact in people (04_impact)..."
+  echo "[5/15] 04a baseline allocation impact (04_impact)..."
   if [[ -n "$REGION" ]]; then
     "$PYTHON" "$SCRIPTS/04_impact.py" --region "$REGION"
   else
     "$PYTHON" "$SCRIPTS/04_impact.py" -i "$GPKG_02" -o "$OUT_ROOT"
   fi
   echo ""
-  echo "[5b/15] 04 allocation figures (04_plots.R)..."
+  echo "[5b/15] 04a allocation figures (04_plots.R)..."
   Rscript "$SCRIPTS/04_plots.R" -i "$CSV_04" "${R_REGION_ARGS[@]}"
 else
   echo ""
-  echo "[5/15] 04 impact skipped (--start-from $START_FROM)"
+  echo "[5/15] 04a impact skipped (--start-from $START_FROM)"
+fi
+
+# 04b. Crisis inference sensitivity (same Meta crisis observation, WorldPop-pattern baseline)
+if _run_step "04b"; then
+  echo ""
+  echo "[5c/15] 04b crisis inference sensitivity..."
+  if [[ -n "$REGION" ]]; then
+    "$PYTHON" "$SCRIPTS/04b_crisis_inference.py" --region "$REGION"
+  else
+    "$PYTHON" "$SCRIPTS/04b_crisis_inference.py" -i "$GPKG_02" -o "$OUT_ROOT"
+  fi
+  echo ""
+  echo "[5d/15] 04b crisis maps (04b_plots.R)..."
+  Rscript "$SCRIPTS/04b_plots.R" -i "$CSV_04b" "${R_REGION_ARGS[@]}"
+else
+  echo ""
+  echo "[5c/15] 04b crisis inference skipped (--start-from $START_FROM)"
 fi
 
 # 3a. Regression
